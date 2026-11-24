@@ -107,5 +107,13 @@ export function compile(workspace: Blockly.Workspace): Command[] {
   return commands;
 }
 
+export function compileTutorial(workspace: Blockly.Workspace): Command[] {
+  const commands = compile(workspace);
+  if (!commands.some(command => command.kind === 'wait' && command.value === 2)) {
+    throw new Error('Connect a wait block set to 2 seconds to your program.');
+  }
+  return commands;
+}
+
 
 

@@ -1,7 +1,8 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as Blockly from 'blockly';
-import { blankWorkspace, compile } from '../src/blocks.ts';
+import { blankWorkspace, compile, compileTutorial } from '../src/blocks.ts';
+import { Simulator } from '../src/simulator.ts';
 
 function work(actions, callback) {
   const workspace = new Blockly.Workspace();
@@ -40,4 +41,27 @@ test('Blockly gives feedback for empty programs and incomplete comparisons', () 
   work([{ type: 'lab_until' }], workspace => assert.throws(() => compile(workspace), /Add a comparison/));
   work([{ type: 'lab_until', inputs: { COND: { block: { type: 'lab_lt' } } } }], workspace =>
     assert.throws(() => compile(workspace), /Fill both sides/));
+});
+
+test('training accepts a connected two-second wait anywhere and executes every action', () => {
+  work([
+    { type: 'lab_speed', fields: { VALUE: 50 } },
+    { type: 'lab_wait', fields: { VALUE: 2 } },
+    { type: 'lab_move', fields: { AMOUNT: 10 } },
+  ], workspace => {
+    const sim = new Simulator();
+    sim.start(compileTutorial(workspace));
+    for (let i = 0; i < 240 && sim.state === 'running'; i++) sim.tick(1 / 60);
+    assert.equal(sim.state, 'done');
+    assert.deepEqual(sim.history.map(entry => entry.command.kind), ['speed', 'wait', 'move']);
+    assert.ok(Math.abs(sim.history[2].before.time - 2) < 0.0001);
+    assert.ok(Math.abs(sim.travel - 10) < 0.0001);
+  });
+});
+
+test('training does not count a disconnected wait or a wait with the wrong duration', () => {
+  work([{ type: 'lab_wait', fields: { VALUE: 1 } }], workspace => {
+    Blockly.serialization.blocks.append({ type: 'lab_wait', fields: { VALUE: 2 } }, workspace);
+    assert.throws(() => compileTutorial(workspace), /Connect a wait block set to 2 seconds/);
+  });
 });

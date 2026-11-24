@@ -1,5 +1,5 @@
 ﻿import * as Blockly from 'blockly';
-import { blankWorkspace, compile, createWorkspace } from './blocks';
+import { blankWorkspace, compile, compileTutorial, createWorkspace } from './blocks';
 import { createArena } from './arena';
 import { missions, parts, quiz, validate, checkObjectives, objectives, type ObjectiveCheck, type Part } from './missions';
 import { Simulator, START } from './simulator';
@@ -177,7 +177,8 @@ function report(message: string, tone = '') {
   get('feedback').textContent = message + (saved ? '' : ' Progress can only be kept in this tab.');
   get('feedback').dataset.tone = tone;
   get('runStatus').textContent = ({
-    success: 'Mission completed', retry: 'Mission incomplete', running: 'Robot running',
+    success: inTutorial() ? 'Practice goal met' : 'Mission completed',
+    retry: inTutorial() ? 'Try again' : 'Mission incomplete', running: 'Robot running',
     stopped: 'Program stopped', paused: 'Robot paused',
   } as Record<string, string>)[tone] ?? 'Ready to run';
   get('runStatus').dataset.tone = tone;
@@ -557,9 +558,7 @@ function startRun(step: boolean) {
   saveCode();
   refreshHints();
   try {
-    const commands = compile(workspace);
-    if (inTutorial() && (commands.length !== 1 || commands[0].kind !== 'wait' || commands[0].value !== 2)) throw new Error('Training goal: connect one wait block set to 2 seconds.');
-    sim.start(commands);
+    sim.start(inTutorial() ? compileTutorial(workspace) : compile(workspace));
     if (step) sim.step();
     report('Watch the highlighted block and the arena.', 'running');
   } catch (error) {
@@ -609,14 +608,17 @@ function renderTutorial() {
   get('objective').textContent = description;
   get('missionText').innerHTML = `<div class="training-steps" aria-hidden="true">${tutorial.map((_, i) => `<i class="${i <= tutorialStep ? 'lit' : ''}"></i>`).join('')}</div>
     ${tutorialStep === 6 ? '<button id="tutorialDone" class="primary" type="button">✓ Practice goal met · Start Level 1</button>' : '<p class="training-cue">→ Follow the highlighted area.</p>'}`;
-  get('missionTools').textContent = '';
-  document.getElementById('tutorialDone')?.addEventListener('click', () => {
-    data.tutorialDone = true;
-    data.tutorialCode = undefined;
-    openLab(0);
-  });
+  get('missionTools').innerHTML = '<button id="skipTutorial" type="button">Skip Tutorial</button>';
+  button('skipTutorial').onclick = leaveTutorial;
+  document.getElementById('tutorialDone')?.addEventListener('click', leaveTutorial);
   clearTutorialHighlight();
   (target === 'toolbox' ? get('workspace').querySelector('.blocklyToolboxDiv') : document.getElementById(target))?.classList.add('training-highlight');
+}
+function leaveTutorial() {
+  data.tutorialDone = true;
+  delete data.tutorialStep;
+  delete data.tutorialCode;
+  openLab(0);
 }
 function advanceTutorial(step: number) {
   tutorialStep = data.tutorialStep = step;
@@ -626,9 +628,10 @@ function advanceTutorial(step: number) {
 function checkTutorial() {
   const waits = workspace.getBlocksByType('lab_wait', false);
   if (tutorialStep === 1 && waits.length) advanceTutorial(2);
-  const wait = workspace.getBlocksByType('lab_start', false)[0]?.getNextBlock();
-  if (tutorialStep === 2 && wait?.type === 'lab_wait') advanceTutorial(3);
-  if (tutorialStep === 3 && wait?.type === 'lab_wait' && Number(wait.getFieldValue('VALUE')) === 2) advanceTutorial(4);
+  const start = workspace.getTopBlocks(false).find(block => block.type === 'lab_start');
+  const connectedWaits = waits.filter(wait => wait.getRootBlock() === start);
+  if (tutorialStep === 2 && connectedWaits.length) advanceTutorial(3);
+  if (tutorialStep === 3 && connectedWaits.some(wait => Number(wait.getFieldValue('VALUE')) === 2)) advanceTutorial(4);
 }
 
 let previous = performance.now(), accumulator = 0, active: string | undefined;
