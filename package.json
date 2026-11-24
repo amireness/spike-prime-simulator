@@ -1,0 +1,22 @@
+{
+  "name": "spike-prime-simulator",
+  "version": "1.0.0",
+  "description": "SPIKE Prime Virtual Robotics Lab",
+  "scripts": {
+    "test": "node --test",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@types/three": "^0.187.0",
+    "blockly": "^13.5.0",
+    "three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
