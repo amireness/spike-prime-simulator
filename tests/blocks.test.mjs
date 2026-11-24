@@ -82,3 +82,35 @@ test('guided runs execute earlier actions and explain an unfinished comparison',
     assert.equal(sim.right, 0);
   });
 });
+
+test('every expanded experiment can be completed with its example', async () => {
+  const { experiments, comprehension } = await import('../src/experiments.ts');
+  const { championQuiz } = await import('../src/guides.ts');
+  assert.deepEqual(experiments.map(level => level.length), [3, 5, 7, 7, 8]);
+  assert.deepEqual(comprehension.map(questions => questions.length), [3, 3, 3, 4]);
+  assert.equal(championQuiz.length, 15);
+  experiments.forEach((level, index) => {
+    level.forEach(activity => {
+      const workspace = new Blockly.Workspace();
+      try {
+        Blockly.serialization.workspaces.load(exampleProgram(index, activity.steps), workspace);
+        const sim = run(compile(workspace));
+        assert.ok(activity.check(sim), activity.title + ': ' + sim.message);
+        assert.equal(sim.left, 0);
+        assert.equal(sim.right, 0);
+        assert.ok(!activity.check(new Simulator()), activity.title + ' must require a run');
+      } finally { workspace.dispose(); }
+    });
+  });
+});
+
+test('an earlier speed or distance experiment does not count for a different target', async () => {
+  const { experiments } = await import('../src/experiments.ts');
+  for (const level of [0, 1, 2, 3]) {
+    const workspace = new Blockly.Workspace();
+    try {
+      Blockly.serialization.workspaces.load(exampleProgram(level, experiments[level][0].steps), workspace);
+      assert.equal(experiments[level][1].check(run(compile(workspace))), false);
+    } finally { workspace.dispose(); }
+  }
+});

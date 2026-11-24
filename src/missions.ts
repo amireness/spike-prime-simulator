@@ -2,16 +2,16 @@
 
 export const missions = [
   {
-    title: 'Configure your robot', minutes: 8, focus: 'Hardware & setup',
-    objective: 'Inspect the driving base and configure it for testing.',
+    title: 'Robot Configuration', minutes: 8, focus: 'Hardware & setup',
+    objective: 'Explore four robot parts and compare three speeds.',
     tasks: ['Click the hub, motors, wheels and yaw sensor in the arena.', 'Use the robot specs to configure the drive, then run your program.'],
     experiment: 'Look at the two drive wheels. Which parts let them move independently?',
     hints: ['Which two ports lead to the wheels?', 'Explore the Movement category for setup controls.', 'Check the units on the speed and distance calibration settings.'],
     extension: 'Explain what would happen if a drive motor were plugged into the wrong port.',
   },
   {
-    title: 'Forward and backward', minutes: 8, focus: 'Straight-line motion',
-    objective: 'Wait one second, drive to the target 20 cm away, then return to the start.',
+    title: 'Distance Challenge', minutes: 8, focus: 'Straight-line motion',
+    objective: 'Try different distances and park on the orange target.',
     tasks: ['Predict where the robot will finish and which way it will face.', 'Run your test and compare the trail and starting marker.'],
     experiment: 'How does changing speed affect travel time and the final position?',
     hints: ['How much distance cancels a 20 cm trip forward?', 'Look in Control for timing and Movement for distance.', 'Check the direction and unit on each straight move.'],
@@ -26,7 +26,7 @@ export const missions = [
     extension: 'Find a steering setting that makes the tightest curve without spinning in place.',
   },
   {
-    title: 'Yaw sensor', minutes: 12, focus: 'Sensor feedback',
+    title: 'Yaw Sensor', minutes: 12, focus: 'Sensor feedback',
     objective: 'Use yaw to control a right turn past 90°, then a left turn below 0°.',
     tasks: ['Make the current direction your zero reference.', 'Stop at each goal. Watch the live yaw reading during both turns.'],
     experiment: 'Change the speed and see how it affects the moment the robot stops.',
@@ -34,15 +34,15 @@ export const missions = [
     extension: 'Make a sensor-controlled turn that stops just past 45°.',
   },
   {
-    title: 'Complete robot test', minutes: 12, focus: 'Full systems check',
-    objective: 'Combine the previous experiments into one driving base test.',
+    title: 'Ultimate Robot Test', minutes: 12, focus: 'Full systems check',
+    objective: 'Build the full test, change three settings, and repair two bugs.',
     tasks: ['The drive uses ports A and E, 50% speed, and 27.63 cm per rotation.', 'The robot waits one second, reaches the 20 cm marker, and returns to its start.', 'The robot traces the left curve from mission 3.', 'The robot sets a new heading reference, then uses yaw to stop beyond 90° on the right and below 0° on the way left.'],
     experiment: 'Pause at a checkpoint or use Step to inspect what the robot does next.',
     hints: ['Which checkpoints can you verify by looking at the trail?', 'Revisit Movement, Control, and Sensors as you debug each checkpoint.', 'Step through your program and check distance or yaw when the active block changes.'],
     extension: 'Try your test at a different speed after completing it. Compare the final headings.',
   },
   {
-    title: 'Robotics Champion Quiz', minutes: 10, focus: 'Reflect & explain',
+    title: 'Championship Quiz', minutes: 10, focus: 'Reflect & explain',
     objective: 'Explain your design decisions and demonstrate what you learned.',
     tasks: ['Why do we configure two movement motors?', 'What happens when we change steering?', 'Why is a yaw sensor useful?', 'Why might turning by sensor readings be more reliable than turning for a fixed number of seconds?', 'How would you improve this driving base?'],
     experiment: 'Share one improvement with a partner and explain how you would test it.',

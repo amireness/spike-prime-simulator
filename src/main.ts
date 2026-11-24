@@ -1,10 +1,11 @@
-﻿import * as Blockly from 'blockly';
+import * as Blockly from 'blockly';
 import { blankWorkspace, compile, createWorkspace } from './blocks';
 import { createArena } from './arena';
 import { missions, parts, type Part } from './missions';
 import { Simulator, START } from './simulator';
 import { badges, levelIcons, remaining, finishClock, formatTime, totalXP, type Clock } from './adventure';
-import { guides, exampleProgram, championQuiz } from './guides';
+import { exampleProgram, championQuiz } from './guides';
+import { experiments, comprehension, type Experiment, type LessonQuestion } from './experiments';
 import './style.css';
 import './game.css';
 
@@ -80,11 +81,12 @@ const dialog = (id: string) => get<HTMLDialogElement>(id);
 const key = 'spike-prime-lab-v1';
 type MissionSave = {
   code?: object; complete: boolean; attempts: number; hints: number; inspected: Part[]; started: number;
-  best?: number; elapsed?: number; bonus?: boolean; improved?: boolean; reflection?: string; triedExperiment?: boolean; runNote?: string;
+  best?: number; elapsed?: number; bonus?: boolean; improved?: boolean; experimentIndex?: number; observations?: { prediction?: string; answer?: string; result?: string }[];
+  questionAnswers?: Record<number, number>; questionOrder?: number[][]; runNote?: string;
 };
 type Save = {
-  current: number; missions: MissionSave[]; answers: Record<number, number>; student?: string; robot?: string;
-  quizOrder?: number[][]; timed?: boolean; screen?: 'welcome' | 'lab'; clock?: Clock; away?: boolean;
+  current: number; missions: MissionSave[]; student?: string; robot?: string;
+  timed?: boolean; screen?: 'welcome' | 'lab'; clock?: Clock; away?: boolean;
 };
 type Settings = { minutes: number; sound: boolean };
 function read<T>(key: string, fallback: T): T {
@@ -92,7 +94,7 @@ function read<T>(key: string, fallback: T): T {
   catch { return fallback; }
 }
 const fresh = (): MissionSave => ({ complete: false, attempts: 0, hints: 0, inspected: [], started: 0 });
-const defaultSave = (): Save => ({ current: 0, missions: missions.map(fresh), answers: {} });
+const defaultSave = (): Save => ({ current: 0, missions: missions.map(fresh) });
 const loaded = read<Save>(key, defaultSave());
 let data = loaded.missions?.length === missions.length && missions[loaded.current] ? loaded : defaultSave();
 const settingsKey = 'robot-academy-settings';
@@ -386,85 +388,133 @@ function updateParts() {
   panel.innerHTML = `<div class="part-actions">${Object.entries(parts).map(([part, content]) => `<button type="button" data-part="${part}" aria-pressed="${selectedPart === part}">${record().inspected.includes(part as Part) ? '✓ ' : ''}${content[0]}</button>`).join('')}</div><p>${selectedPart ? parts[selectedPart][1] : 'Click a robot part or choose it here.'}</p>`;
   panel.querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => partInfo(b.dataset.part as Part));
 }
-﻿function partInfo(part: Part) {
+function partInfo(part: Part) {
   selectedPart = part;
-  if (current === 0) updateParts();
-  else report(parts[part][1]);
+  if (current === 0) {
+    if (!record().inspected.includes(part)) record().inspected.push(part);
+    if (!teaching) persist();
+    updateParts();
+    updateExperimentReady();
+  } else report(parts[part][1]);
 }
 
 const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+const experimentIndex = () => record().experimentIndex ?? 0;
+const activeExperiment = () => experiments[current]?.[experimentIndex()];
+function currentObservation() {
+  return ((record().observations ??= [])[experimentIndex()] ??= {});
+}
 function renderMission() {
   const m = missions[current];
   get('missionMeta').textContent = `LEVEL ${current + 1} · ${m.minutes} MIN`;
   get('missionTitle').textContent = m.title;
   get('objective').textContent = m.objective;
-  get('missionTools').textContent = '';
-  if (current === 5) {
-    renderQuiz();
-  } else {
-    const guide = guides[current];
-    get('missionText').innerHTML = `<div class="guided-intro"><strong>Build it one block at a time</strong>
-      <p>Drag each new block from the named category. Snap it below the last block. Click a number or menu on a block to change it.</p>
-      <button id="showExample" type="button">Show me how</button></div>
-      <ol class="guide-steps">${guide.steps.map((step, i) => {
-        const right = step.block.inputs?.COND.block?.type === 'lab_gt';
-        const threshold = right ? 90 : 0;
-        const compare = right ? '&gt;' : '&lt;';
-        const nested = step.block.type === 'lab_until' ? `<span class="block-example operators"><span class="block-example sensors">yaw angle</span> ${compare} <b>${threshold}</b></span>` : '';
+  const activity = activeExperiment();
+  if (activity) renderExperiment(activity);
+  else renderQuiz(current === 5 ? championQuiz : comprehension[current] ?? []);
+  navigation();
+}
+function renderExperiment(activity: Experiment) {
+  const index = experimentIndex();
+  const last = record().observations?.[index - 1]?.result;
+  get('missionText').innerHTML = `<div class="guided-intro"><p class="eyebrow">EXPERIMENT ${index + 1} OF ${experiments[current].length}</p>
+      <h2>${activity.title}</h2></div>
+    ${current === 0 && !index ? '<p><strong>Explore first.</strong> Select all four parts to see what each one does.</p><div id="partPanel"></div>' : ''}
+    <label for="experimentPrediction"><strong>1. Predict</strong><br>${activity.predict}</label>
+    <textarea id="experimentPrediction" rows="2" maxlength="400" placeholder="I think…"></textarea>
+    <p class="try-next"><strong>2. Change your blocks.</strong> ${escape(activity.edit)}</p>
+    <details class="experiment-blocks" ${index ? '' : 'open'}><summary>Exact block instructions</summary>
+      <p>Drag each block from the named category. Click a number or menu to edit it.</p>
+      <ol class="guide-steps">${activity.steps.map((step, i) => {
+        const compare = step.comparison ? escape(step.comparison.operator) : '';
+        const threshold = step.comparison?.threshold;
+        const nested = compare ? `<span class="block-example operators"><span class="block-example sensors">yaw angle</span> ${compare} <b>${threshold}</b></span>` : '';
         return `<li><p>Open <strong>${step.category}</strong>. Drag this block and snap it below <strong>${i === 0 ? 'When program starts' : 'the block you just added'}</strong>.</p>
           <div class="block-example ${step.category.toLowerCase()}">${escape(step.example).replace(/\[([^\]]+)\]/g, '<b>$1</b>')}${nested}</div>
           <p>${step.instruction}</p>
-          ${nested ? `<ol class="nest-steps"><li>Open <strong>Operators</strong>. Drag the <strong>${compare}</strong> comparison into the empty slot on <strong>wait until</strong>.</li><li>Open <strong>Sensors</strong>. Drag <strong>yaw angle</strong> into the left number slot on the green block.</li><li>Click the number on the right and enter <strong>${threshold}</strong>.</li></ol>` : ''}
+          ${nested ? `<ol class="nest-steps"><li>Open <strong>Operators</strong>. Drag the <strong>${compare}</strong> block into the empty slot on <strong>wait until</strong>.</li><li>Open <strong>Sensors</strong>. Drag <strong>yaw angle</strong> into the left box on the green block.</li><li>Click the number on the right and enter <strong>${threshold}</strong>.</li></ol>` : ''}
         </li>`;
-      }).join('')}</ol>
-      <p><strong>Press Run Robot.</strong> ${guide.observe}</p>
-      <p class="try-next"><strong>Try this next.</strong> ${guide.experiment}</p>
-      ${current === 0 ? '<div id="partPanel"></div>' : ''}
-      <form id="reflectionForm"><label for="reflection"><strong>Answer after you run</strong><br>${guide.question}</label>
-        <textarea id="reflection" rows="2" maxlength="400" required placeholder="I noticed…"></textarea>
-        <button id="finishExperiment" type="submit" class="primary">Next Level</button>
-        <p id="experimentReady" aria-live="polite"></p>
-      </form>`;
-    const reflection = get<HTMLTextAreaElement>('reflection');
-    reflection.value = record().reflection ?? '';
-    reflection.oninput = () => {
-      record().reflection = reflection.value;
-      if (!teaching) persist();
-      updateExperimentReady();
-    };
-    get<HTMLFormElement>('reflectionForm').onsubmit = event => {
-      event.preventDefault();
-      if (!record().triedExperiment || !reflection.value.trim()) return;
-      if (record().complete) switchMission(current + 1);
-      else completeLevel();
-    };
-    updateExperimentReady();
-    updateParts();
-  }
-  button('showExample').onclick = () => {
-    const hasWork = workspace.getAllBlocks(false).some(block => block.type !== 'lab_start');
-    if (hasWork && !confirm('Replace the blocks in this workspace with the example?')) return;
-    sim.reset();
-    clearTrails();
-    record().code = exampleProgram(Math.min(current, 4));
-    loadCode();
+      }).join('')}</ol></details>
+    <button id="showExample" type="button">Show me how</button>
+    <p><strong>3. Press Run Robot.</strong></p>
+    <p><strong>4. Observe.</strong> ${activity.observe}</p>
+    ${last ? `<details><summary>Last experiment’s result</summary><p>${escape(last)}</p></details>` : ''}
+    <form id="reflectionForm"><label for="reflection"><strong>5. Answer</strong><br>${activity.question}</label>
+      <textarea id="reflection" rows="2" maxlength="400" required placeholder="I noticed…"></textarea>
+      <button id="finishExperiment" type="submit" class="primary">${index + 1 < experiments[current].length ? 'Next experiment' : comprehension[current] ? 'Go to questions' : 'Finish level'}</button>
+      <p id="experimentReady" aria-live="polite"></p>
+    </form>`;
+  const prediction = get<HTMLTextAreaElement>('experimentPrediction');
+  const reflection = get<HTMLTextAreaElement>('reflection');
+  const result = currentObservation();
+  prediction.value = result.prediction ?? '';
+  reflection.value = result.answer ?? '';
+  prediction.oninput = () => {
+    result.prediction = prediction.value;
     if (!teaching) persist();
-    report('Example loaded. Press Run Robot to see it work.');
+    updateExperimentReady();
   };
-  navigation();
+  reflection.oninput = () => {
+    result.answer = reflection.value;
+    if (!teaching) persist();
+    updateExperimentReady();
+  };
+  get<HTMLFormElement>('reflectionForm').onsubmit = event => {
+    event.preventDefault();
+    if (button('finishExperiment').disabled) return;
+    record().experimentIndex = index + 1;
+    delete record().runNote;
+    if (!teaching) persist();
+    if (activeExperiment() || comprehension[current]) {
+      renderMission();
+      get('missionMeta').closest('.mission')!.scrollTop = 0;
+      report(activeExperiment() ? 'Make a new prediction, then change your blocks and run again.' : 'Answer the questions about the experiments you just ran.');
+    } else finishLesson();
+  };
+  button('showExample').onclick = () => loadExample(activity);
+  updateParts();
+  updateExperimentReady();
+}
+function loadExample(activity?: Experiment) {
+  const hasWork = workspace.getAllBlocks(false).some(block => block.type !== 'lab_start');
+  if (hasWork && !confirm('Replace the blocks in this workspace with the example?')) return;
+  if (current === 2 && sim.travel > 0.14) {
+    arena?.clear(true);
+    get('previousTrail').hidden = false;
+  } else if (current !== 2) clearTrails();
+  sim.reset();
+  record().code = exampleProgram(Math.min(current, 4), activity?.steps);
+  loadCode();
+  if (!teaching) persist();
+  report('Example loaded. Make your prediction, then press Run Robot.');
+  updateExperimentReady();
 }
 function updateExperimentReady() {
   const submit = document.getElementById('finishExperiment') as HTMLButtonElement | null;
   if (!submit) return;
-  const level = record();
-  submit.disabled = !(level.triedExperiment && level.reflection?.trim());
-  get('experimentReady').textContent = !level.triedExperiment ? 'Run your blocks first.' : !level.reflection?.trim() ? 'Write what you noticed to continue.' : 'Ready for the next level.';
+  const result = currentObservation();
+  const busy = sim.state === 'running' || sim.state === 'paused';
+  const missingParts = current === 0 && experimentIndex() === 0 && record().inspected.length < 4;
+  submit.disabled = busy || missingParts || !result.prediction?.trim() || !result.result || !result.answer?.trim();
+  get('experimentReady').textContent = missingParts ? 'Explore all four robot parts.' : busy ? 'Watch your robot finish the run.' :
+    !result.prediction?.trim() ? 'Write your prediction before running.' : !result.result ? activeExperiment()!.goal :
+    !result.answer?.trim() ? 'Answer the question using what you saw.' : 'Ready to continue.';
 }
-function renderQuiz() {
-  const saved = session();
-  if (!saved.quizOrder) {
-    saved.answers = {};
-    saved.quizOrder = championQuiz.map(({ options }) => {
+function finishLesson() {
+  if (record().complete && current < 5) switchMission(current + 1);
+  else if (record().complete) showSummary();
+  else completeLevel();
+}
+function renderQuiz(questions: LessonQuestion[]) {
+  if (!questions.length) {
+    get('missionText').innerHTML = '<p>All experiments are recorded.</p><button id="finishLesson" class="primary" type="button">Finish level</button>';
+    button('finishLesson').onclick = finishLesson;
+    return;
+  }
+  const level = record();
+  if (level.questionOrder?.length !== questions.length) {
+    level.questionAnswers = {};
+    level.questionOrder = questions.map(({ options }) => {
       const order = options.map((_, i) => i);
       for (let i = order.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -474,35 +524,41 @@ function renderQuiz() {
     });
     if (!teaching) persist();
   }
-  get('missionText').innerHTML = `<p>Pick one answer for each question. Use the robot to test a prediction if you get stuck.</p>
-    <button id="showExample" type="button">Show me how</button>
-    <p>This loads the full Level 5 program so you can test your ideas.</p>
-    <form id="quizForm">${championQuiz.map((q, i) => `<fieldset><legend>${i + 1}. ${q.question}</legend>
-      ${saved.quizOrder![i].map(j => `<label><input type="radio" name="q${i}" value="${j}" ${saved.answers[i] === j ? 'checked' : ''} required> ${escape(q.options[j])}</label>`).join('')}
+  const answers = level.questionAnswers ??= {};
+  get('missionText').innerHTML = `<h2>${current === 5 ? '15 championship questions' : 'Check your understanding'}</h2>
+    <p>Pick one answer per question, then check your answers. You can try again.</p>
+    ${current === 5 ? '<button id="showExample" type="button">Show me how</button><p>Load the full Level 5 program to test a prediction.</p>' : ''}
+    <form id="quizForm">${questions.map((q, i) => `<fieldset><legend>${i + 1}. ${q.question}</legend>
+      ${level.questionOrder![i].map(j => `<label><input type="radio" name="q${i}" value="${j}" ${answers[i] === j ? 'checked' : ''} required> ${escape(q.options[j])}</label>`).join('')}
       <p id="quizNote${i}" class="quiz-note" aria-live="polite"></p></fieldset>`).join('')}
-      <button type="submit" class="primary">Check answers</button></form>`;
+      <button type="submit" class="primary">Check answers</button><p id="quizResult" role="status"></p></form>`;
+  if (current === 5) button('showExample').onclick = () => loadExample();
   const form = get<HTMLFormElement>('quizForm');
   form.onchange = event => {
     const field = event.target as HTMLInputElement;
     const i = Number(field.name.slice(1));
-    saved.answers[i] = Number(field.value);
+    answers[i] = Number(field.value);
     get('quizNote' + i).textContent = '';
     if (!teaching) persist();
   };
   form.onsubmit = event => {
     event.preventDefault();
     updateClock();
-    record().attempts++;
-    const correct = championQuiz.filter((q, i) => {
-      const passed = saved.answers[i] === 0;
+    level.attempts++;
+    const correct = questions.filter((q, i) => {
+      const passed = answers[i] === 0;
       const note = get('quizNote' + i);
       note.dataset.correct = String(passed);
       note.textContent = passed ? '✓ Correct' : 'Try again. ' + q.explanation;
       return passed;
     }).length;
     if (!teaching) persist();
-    if (correct === championQuiz.length) completeLevel();
-    else report(`${correct} of ${championQuiz.length} correct. Read the explanations and try again.`, 'retry');
+    if (correct === questions.length) finishLesson();
+    else {
+      const message = `${correct} of ${questions.length} correct. Read the explanations and try again.`;
+      get('quizResult').textContent = message;
+      report(message, 'retry');
+    }
   };
 }
 
@@ -549,21 +605,33 @@ button('celebrateNext').onclick = () => {
   if (current < 5) switchMission(current + 1);
   else showSummary();
 };
-﻿function finishRun(stopped = false) {
+let madePredictionBeforeRun = false;
+function finishRun(stopped = false) {
   updateClock();
-  const ranAnAction = sim.history.length > 0 || sim.time > 0;
   const moved = Math.abs(sim.wheelLeft) + Math.abs(sim.wheelRight) > 0.0001;
   const observation = moved
     ? `The robot traveled ${sim.travel.toFixed(1)} cm and finished at yaw ${sim.yaw.toFixed(1)}°. The wheels are stopped.`
     : 'The robot stayed at the start.';
   const settingsOnly = sim.history.length > 0 && sim.history.every(entry => ['ports', 'speed', 'calibrate'].includes(entry.command.kind));
   const setupNote = settingsOnly ? ` Current settings: ${sim.ports}, ${sim.speed}%, ${sim.circumference} cm per rotation.` : '';
-  const message = [stopped ? 'You stopped the program.' : sim.message, observation + setupNote].filter(Boolean).join(' ');
-  if (current < 5 && ranAnAction) {
-    record().triedExperiment = true;
+  const offset = START.z - sim.pose.z;
+  let positionNote = '';
+  if (current === 1 && moved) {
+    positionNote = Math.hypot(sim.pose.x - START.x, offset) < 0.05 ? 'Final position: back at the start.' :
+      `Final position: ${Math.abs(offset).toFixed(1)} cm ${offset >= 0 ? 'ahead of' : 'behind'} the start line.`;
+  }
+  const activity = activeExperiment();
+  const message = [stopped ? 'You stopped the program.' : sim.message, observation + setupNote, positionNote,
+    'Simulated run time: ' + sim.time.toFixed(2) + ' s.'].filter(Boolean).join(' ');
+  if (activity) {
     record().runNote = message;
+    const result = currentObservation();
+    if (!stopped && madePredictionBeforeRun && activity.check(sim)) result.result = message;
+    const guidance = result.result ? '' : !madePredictionBeforeRun ? ' Write a prediction, then run again to record this experiment.' : ' Next, try this goal: ' + activity.goal;
     if (!teaching) persist();
     updateExperimentReady();
+    report(message + guidance, stopped ? 'stopped' : sim.state === 'error' && !result.result ? 'retry' : 'observed');
+    return;
   }
   report(message, stopped ? 'stopped' : sim.state === 'error' ? 'retry' : 'observed');
 }
@@ -576,8 +644,10 @@ function startRun(step: boolean) {
   try {
     sim.start(compile(workspace, { runUntilUnfinishedBlock: true }));
     priorState = 'running';
+    madePredictionBeforeRun = !!(activeExperiment() && currentObservation().prediction?.trim());
     if (step) sim.step();
     report('Watch the highlighted block and the arena.', 'running');
+    updateExperimentReady();
   } catch (error) {
     report(error instanceof Error ? error.message : 'Check your block connections.', 'retry');
   }
@@ -601,12 +671,12 @@ button('resetRobot').onclick = () => {
   sim.reset();
   clearTrails();
   report('Robot returned to the start.');
+  updateExperimentReady();
 };
 button('resetMission').onclick = () => {
   if (!confirm('Reset this level’s program and progress? Your personal best stays saved.')) return;
   const best = record().best;
   session().missions[current] = { ...fresh(), best };
-  if (current === 5) { session().answers = {}; delete session().quizOrder; }
   openLab(current);
 };
 

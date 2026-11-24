@@ -8,10 +8,10 @@ export const reference = [
   ['Robotics Champion Quiz', championQuiz.map((question, i) => (i + 1) + '. ' + question.options[0]).join(' · ')],
 ];
 export const criteria = [
-  'Run a program and answer the observation question. The example sets up both ports, speed, and calibration.',
-  'Run a program and answer the observation question. Try equal forward and backward distances of 20, 10, and 30 cm.',
-  'Run a program and answer the observation question. Compare the trails and yaw for the five steering values.',
-  'Run a program and answer the observation question. The example uses two comparisons to stop each turn.',
-  'Run a program and answer the observation question. Compare the official example with the same run at a different speed.',
-  'Answer all 12 questions. Explanations appear after checking answers, and students may retry.',
+  'Explore four parts. Predict, run, and compare 20 cm drives at 25%, 50%, and 100%, then answer three questions.',
+  'Run the 20/20, 10/10, 30/30, and 30/10 cm trips, park within 0.5 cm of the target, then answer three questions.',
+  'Predict and run steering 0, ?25, ?50, and ?100. Compare the trails, then answer three questions.',
+  'Compare 45?, 90?, and 135? right turns, a left turn, and timed versus sensor-based turns at different speeds. Answer four questions.',
+  'Run the official test, then compare three parameter changes. Reproduce and fix a port bug and a comparison bug.',
+  'Answer all 15 championship questions. Explanations appear after checking answers, and students may retry.',
 ];

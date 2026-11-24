@@ -225,3 +225,14 @@ dialog::backdrop { background: #20184d99; }
 @media (min-width: 1051px) {
   #lab .mission { max-height: calc(clamp(360px, 58vh, 700px) + 128px); overflow: auto; }
 }
+
+#experimentPrediction {
+  width: 100%;
+  border: 1px solid #aab8dc;
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+  resize: vertical;
+}
+.experiment-blocks { margin-top: 8px; }
+#missionText > p + p { margin-top: 5px; }

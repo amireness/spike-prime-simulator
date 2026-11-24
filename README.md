@@ -36,7 +36,7 @@ The workflow runs the tests and builds before publishing. Vite uses relative ass
 
 ## Classroom controls
      
-Choose **Student Challenge Mode** for the countdown. It begins when the adventure opens and keeps running across refreshes or tab changes. Each experiment includes block-by-block steps, a **Show me how** example, and a reflection question. Use **Results** to review saved progress. Practice can continue after time runs out. **Teacher mode** on the welcome screen provides duration and sound settings, independent level previews, validation criteria, and the teacher reference. Settings apply only in that browser.
+Choose **Student Challenge Mode** for the countdown. It begins when the adventure opens and keeps running across refreshes or tab changes. Each experiment asks students to predict, edit, run, observe, and answer a question. **Show me how** loads the current example, including intentionally broken programs for the debugging activities. Use **Results** to review saved progress. Practice can continue after time runs out. **Teacher mode** on the welcome screen provides duration and sound settings, independent level previews, validation criteria, and the teacher reference. Settings apply only in that browser.
 
 Drag blocks from the toolbox and connect them below **When program starts**. Right-click blocks for actions such as Duplicate and Delete. **Run** starts from the starting marker. **Pause** holds the robot and program. **Step** completes one action, including any movement or wait in that action. **Stop** ends the current run and keeps its trail. **Reset robot** clears the arena run. **Reset level** clears that level's saved program and progress and keeps its personal best.
 

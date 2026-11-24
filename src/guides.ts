@@ -1,5 +1,5 @@
 ﻿type Block = { type: string; fields?: Record<string, string | number>; inputs?: Record<string, { block?: Block; shadow?: Block }>; next?: { block: Block } };
-type Step = { category: string; example: string; instruction: string; block: Block };
+export type Step = { category: string; example: string; instruction: string; block: Block; comparison?: { operator: string; threshold: number } };
 const setup: Step[] = [
   { category: 'Movement', example: 'set movement motors to [A + E]', instruction: 'Choose A + E in the menu. Those ports control the left and right wheels.', block: { type: 'lab_ports', fields: { VALUE: 'A+E' } } },
   { category: 'Movement', example: 'set movement speed to [50] %', instruction: 'Click the number and type 50. This sets how fast the wheels turn.', block: { type: 'lab_speed', fields: { VALUE: 50 } } },
@@ -21,7 +21,7 @@ function yawTurn(right: boolean): Step[] {
   return [
     { category: 'Movement', example: 'start moving with steering [' + steering + ']', instruction: 'Type ' + steering + ' for an in-place turn to the ' + (right ? 'right.' : 'left.'), block: { type: 'lab_drive', fields: { STEER: steering } } },
     {
-      category: 'Control', example: 'wait until', instruction: 'Fill the empty slot as shown below. The wheels keep turning while the program checks yaw.',
+      category: 'Control', example: 'wait until', comparison: { operator, threshold }, instruction: 'Fill the empty slot as shown below. The wheels keep turning while the program checks yaw.',
       block: { type: 'lab_until', inputs: { COND: { block: { type: right ? 'lab_gt' : 'lab_lt', inputs: {
         LEFT: { block: { type: 'lab_yaw' } }, RIGHT: { shadow: { type: 'lab_number', fields: { VALUE: threshold } } },
       } } } } },
@@ -42,8 +42,8 @@ export const guides = [
   { steps: [...setup, ...trip, ...curve, ...turns], observe: 'Watch for the wait, the trip to the target and back, the left curve, and the two sensor-controlled turns.', experiment: 'Predict what will change at 25% speed. Change the speed from 50 to 25 and run again. Compare the path and the time it took.', question: 'What changed when you lowered the speed? What stayed about the same?' },
 ];
 
-export function exampleProgram(level: number) {
-  const actions = guides[level].steps.map(step => structuredClone(step.block));
+export function exampleProgram(level: number, steps = guides[level].steps) {
+  const actions = steps.map(step => structuredClone(step.block));
   let chain: Block | undefined;
   for (const block of [{ type: 'lab_start' }, ...actions].reverse() as Block[]) {
     chain = chain ? { ...block, next: { block: chain } } : block;
@@ -64,4 +64,7 @@ export const championQuiz = [
   { question: 'What does resetting yaw to 0 do?', options: ['Makes the current heading the new zero', 'Drives the robot to the start', 'Sets both wheel speeds to zero'], explanation: 'Yaw is an angle relative to a reference. Resetting it changes the reference, not the position.' },
   { question: 'Which comparison waits until the robot has turned right past 90°?', options: ['yaw angle > 90', 'yaw angle < 90', 'yaw angle = 0'], explanation: 'Right turns increase yaw. The greater-than comparison becomes true after 90°.' },
   { question: 'Predict what happens after wait until yaw < 0 becomes true during a left turn.', options: ['The next stop moving block stops both motors', 'The wait block stops both motors by itself', 'Yaw jumps to exactly 0°'], explanation: 'Wait until lets the program continue when the comparison is true. The next stop moving block stops the wheels.' },
+  { question: 'A 20 cm drive stays still and reports the wrong ports. What should you check?', options: ['Whether Movement is set to A + E', 'Whether the yaw reads 90?', 'Whether the wait is set to 2 seconds'], explanation: 'A + E are the two connected drive motors.' },
+  { question: 'A right turn stops immediately when it checks yaw < 90 from zero. What is the bug?', options: ['Zero already satisfies the comparison', 'The robot is moving too fast to read yaw', 'It needs a second yaw reset'], explanation: 'Zero is already less than 90. Use yaw > 90 to wait for a right turn.' },
+  { question: 'Predict what happens to a 0.4-second turn if you halve the motor speed.', options: ['It turns through a smaller angle', 'It always turns the same angle', 'It turns in the opposite direction'], explanation: 'A fixed wait measures time. A slower robot turns less in that time.' },
 ];
