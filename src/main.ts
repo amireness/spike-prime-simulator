@@ -1,9 +1,10 @@
 ﻿import * as Blockly from 'blockly';
-import { blankWorkspace, compile, compileTutorial, createWorkspace } from './blocks';
+import { blankWorkspace, compile, createWorkspace } from './blocks';
 import { createArena } from './arena';
-import { missions, parts, quiz, validate, checkObjectives, objectives, type ObjectiveCheck, type Part } from './missions';
+import { missions, parts, type Part } from './missions';
 import { Simulator, START } from './simulator';
-import { badges, levelIcons, predictions, bonuses, tutorial, drawDemo, remaining, finishClock, formatTime, totalXP, type Clock } from './adventure';
+import { badges, levelIcons, remaining, finishClock, formatTime, totalXP, type Clock } from './adventure';
+import { guides, exampleProgram, championQuiz } from './guides';
 import './style.css';
 import './game.css';
 
@@ -40,10 +41,10 @@ app.innerHTML = `
     <nav id="missionNav" class="level-map" aria-label="Levels"></nav>
     <div id="returnNote" class="return-note" role="status" hidden></div>
     <div class="lab-grid">
-      <section class="mission" aria-label="Level objectives">
+      <section class="mission" aria-label="Experiment instructions">
         <div class="brief-main"><div id="missionMeta" class="eyebrow"></div><h1 id="missionTitle"></h1><p id="objective"></p></div>
-        <div id="briefDetails"><div id="missionText"></div><div id="missionTools"></div></div>
         <div class="feedback"><strong id="runStatus">Ready to run</strong><div id="feedback" role="status"></div><button id="next" class="primary" type="button" hidden>Next Level</button></div>
+        <div id="briefDetails"><div id="missionText"></div><div id="missionTools"></div></div>
       </section>
       <section class="lab-card editor" aria-labelledby="editorTitle">
         <div class="card-head"><h2 id="editorTitle">Programming bay</h2><button id="resetMission" class="quiet" type="button">Reset level</button></div>
@@ -79,11 +80,11 @@ const dialog = (id: string) => get<HTMLDialogElement>(id);
 const key = 'spike-prime-lab-v1';
 type MissionSave = {
   code?: object; complete: boolean; attempts: number; hints: number; inspected: Part[]; started: number;
-  checks?: ObjectiveCheck[]; best?: number; elapsed?: number; bonus?: boolean; improved?: boolean; bestChecks?: number; prediction?: string;
+  best?: number; elapsed?: number; bonus?: boolean; improved?: boolean; reflection?: string; triedExperiment?: boolean; runNote?: string;
 };
 type Save = {
   current: number; missions: MissionSave[]; answers: Record<number, number>; student?: string; robot?: string;
-  tutorialDone?: boolean; tutorialStep?: number; tutorialCode?: object; timed?: boolean; screen?: 'welcome' | 'lab'; clock?: Clock; away?: boolean;
+  quizOrder?: number[][]; timed?: boolean; screen?: 'welcome' | 'lab'; clock?: Clock; away?: boolean;
 };
 type Settings = { minutes: number; sound: boolean };
 function read<T>(key: string, fallback: T): T {
@@ -94,14 +95,11 @@ const fresh = (): MissionSave => ({ complete: false, attempts: 0, hints: 0, insp
 const defaultSave = (): Save => ({ current: 0, missions: missions.map(fresh), answers: {} });
 const loaded = read<Save>(key, defaultSave());
 let data = loaded.missions?.length === missions.length && missions[loaded.current] ? loaded : defaultSave();
-if (data.missions.some(level => level.complete || level.attempts || level.code?.constructor === Object && level.started)) data.tutorialDone ??= true;
 const settingsKey = 'robot-academy-settings';
 let settings = read<Settings>(settingsKey, { minutes: 60, sound: false });
 let current = data.current;
 let teaching = false, inLab = false, loading = false, saved = true;
 let preview = defaultSave();
-let tutorialStep = Math.max(0, Math.min(6, data.tutorialStep ?? 0));
-const inTutorial = () => !teaching && !data.tutorialDone;
 const session = () => teaching ? preview : data;
 const record = () => session().missions[current];
 const completeCount = () => session().missions.filter(level => level.complete).length;
@@ -117,15 +115,14 @@ let saveTimer: number | undefined;
 function saveCode() {
   if (loading || !inLab) return;
   const code = Blockly.serialization.workspaces.save(workspace);
-  if (inTutorial()) data.tutorialCode = code;
-  else record().code = code;
+  record().code = code;
   if (!teaching) persist();
 }
 function loadCode() {
   clearTimeout(saveTimer);
   loading = true;
   workspace.clear();
-  try { Blockly.serialization.workspaces.load((inTutorial() ? data.tutorialCode : record().code) ?? blankWorkspace(), workspace); }
+  try { Blockly.serialization.workspaces.load(record().code ?? blankWorkspace(), workspace); }
   catch {
     workspace.clear();
     Blockly.serialization.workspaces.load(blankWorkspace(), workspace);
@@ -133,15 +130,13 @@ function loadCode() {
   workspace.clearUndo();
   workspace.getToolbox()?.clearSelection();
   Blockly.svgResize(workspace);
-  workspace.scrollCenter();
+  const start = workspace.getTopBlocks(false).find(block => block.type === 'lab_start');
+  if (start) workspace.centerOnBlock(start.id, true);
+  else workspace.scrollCenter();
   loading = false;
 }
 workspace.addChangeListener(event => {
   if (loading || !inLab) return;
-  if (inTutorial()) {
-    if (event.type === Blockly.Events.TOOLBOX_ITEM_SELECT && 'newItem' in event && event.newItem === 'Control' && tutorialStep === 0) advanceTutorial(1);
-    if (!event.isUiEvent) checkTutorial();
-  }
   if (event.isUiEvent) return;
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(saveCode, 100);
@@ -177,8 +172,7 @@ function report(message: string, tone = '') {
   get('feedback').textContent = message + (saved ? '' : ' Progress can only be kept in this tab.');
   get('feedback').dataset.tone = tone;
   get('runStatus').textContent = ({
-    success: inTutorial() ? 'Practice goal met' : 'Mission completed',
-    retry: inTutorial() ? 'Try again' : 'Mission incomplete', running: 'Robot running',
+    success: 'Level completed', retry: 'Check your run', observed: 'Experiment run', running: 'Robot running',
     stopped: 'Program stopped', paused: 'Robot paused',
   } as Record<string, string>)[tone] ?? 'Ready to run';
   get('runStatus').dataset.tone = tone;
@@ -196,9 +190,9 @@ function mapMarkup(active: boolean) {
 }
 function navigation() {
   get('xp').textContent = '★ ' + totalXP(session().missions) + ' XP';
-  get('missionNav').innerHTML = inTutorial() ? '<div class="tutorial-map">TRAINING BAY <span>Learn the controls, then start Level 1</span></div>' : mapMarkup(true);
+  get('missionNav').innerHTML = mapMarkup(true);
   get('missionNav').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => switchMission(Number(b.dataset.mission)));
-  button('next').hidden = inTutorial() || !record().complete || current >= missions.length - 1 || !unlocked(current + 1);
+  button('next').hidden = !record().complete || current >= missions.length - 1 || !unlocked(current + 1);
 }
 function welcome() {
   if (inLab) saveCode();
@@ -233,13 +227,14 @@ function openLab(index: number) {
   if (!teaching) {
     data.current = current;
     data.screen = 'lab';
-    if (!inTutorial() && !record().started) record().started = Date.now();
+    if (!record().started) record().started = Date.now();
     startClock();
     persist();
   } else if (!record().started) record().started = Date.now();
   loadCode();
   renderMission();
-  report(!inTutorial() && record().complete ? 'Badge earned. You can keep experimenting.' : current === 5 ? 'Try the judge quiz to earn your final badge.' : 'Build a program and try it in the arena.', !inTutorial() && record().complete ? 'success' : '');
+  get('missionMeta').closest('.mission')!.scrollTop = 0;
+  report(record().runNote || (current === 5 ? 'Choose an answer for each question, then check your answers.' : 'Follow the steps, run your robot, then answer the question.'), record().complete ? 'success' : record().runNote ? 'observed' : '');
   updateClock();
   window.scrollTo(0, 0);
 }
@@ -268,7 +263,7 @@ for (const id of ['studentName', 'robotName']) input(id).oninput = () => input(i
 button('next').onclick = () => switchMission(current + 1);
 
 function startClock() {
-  if (!teaching && data.timed && data.tutorialDone && !data.clock) {
+  if (!teaching && data.timed && !data.clock) {
     data.clock = { startedAt: Date.now(), durationMs: settings.minutes * 60_000 };
   }
 }
@@ -380,7 +375,7 @@ button('saveSettings').onclick = () => {
 button('resetSession').onclick = () => {
   if (!confirm('Clear this browser’s student names, programs, timer, and badges?')) return;
   data = defaultSave();
-  current = tutorialStep = 0;
+  current = 0;
   dialog('teacherPanel').close();
   welcome();
 };
@@ -391,107 +386,126 @@ function updateParts() {
   panel.innerHTML = `<div class="part-actions">${Object.entries(parts).map(([part, content]) => `<button type="button" data-part="${part}" aria-pressed="${selectedPart === part}">${record().inspected.includes(part as Part) ? '✓ ' : ''}${content[0]}</button>`).join('')}</div><p>${selectedPart ? parts[selectedPart][1] : 'Click a robot part or choose it here.'}</p>`;
   panel.querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => partInfo(b.dataset.part as Part));
 }
-function partInfo(part: Part) {
+﻿function partInfo(part: Part) {
   selectedPart = part;
-  if (!inTutorial() && current === 0) {
-    if (!record().inspected.includes(part)) record().inspected.push(part);
-    updateParts();
-    renderChecks();
-    if (sim.state === 'done') finishRun();
-    if (!teaching) persist();
-  } else report(parts[part][1]);
+  if (current === 0) updateParts();
+  else report(parts[part][1]);
 }
-function renderChecks() {
-  const list = document.getElementById('objectiveList');
-  if (!list) return;
-  const entry = record();
-  list.innerHTML = objectives[current].map((goal, i) => {
-    const check = entry.checks?.[i];
-    const inspected = current === 0 && i === 0 && entry.inspected.length === 4;
-    const state = inspected || check?.passed || (entry.complete && !entry.checks) ? 'pass' : check ? 'fail' : 'pending';
-    return `<li data-result="${state}"><span aria-label="${state === 'pass' ? 'Met' : state === 'fail' ? 'Needs work' : 'Pending'}">${state === 'pass' ? '✓' : state === 'fail' ? '×' : '○'}</span><div>${goal}${state === 'fail' ? `<small>${check!.feedback}</small>` : ''}</div></li>`;
-  }).join('');
-}
-function refreshHints() {
-  const b = document.getElementById('hint') as HTMLButtonElement | null;
-  if (!b) return;
-  const level = record();
-  const available = Math.min(3, 1 + Math.max(level.attempts, Math.floor((Date.now() - level.started) / 45000)));
-  b.disabled = level.hints >= available;
-  b.textContent = level.hints === 3 ? 'All hints shown' : b.disabled ? 'Next hint unlocks shortly' : 'Reveal hint ' + (level.hints + 1);
-  get('hintList').innerHTML = missions[current].hints.slice(0, level.hints).map(hint => '<li>' + hint + '</li>').join('');
-}
-let demoStart = 0;
+
+const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 function renderMission() {
-  demoStart = 0;
-  navigation();
-  button('resetMission').hidden = inTutorial();
-  if (inTutorial()) { renderTutorial(); return; }
-  clearTutorialHighlight();
   const m = missions[current];
-  get('missionMeta').textContent = `LEVEL ${current + 1} · ${m.minutes} MIN · ${m.focus}`;
+  get('missionMeta').textContent = `LEVEL ${current + 1} · ${m.minutes} MIN`;
   get('missionTitle').textContent = m.title;
   get('objective').textContent = m.objective;
-  get('missionText').innerHTML = `<ul id="objectiveList" class="objective-list" aria-label="Objective checklist"></ul>
-    <details class="demo"><summary>See the goal</summary><canvas id="demo" width="330" height="192" role="img" aria-label="${m.objective}"></canvas><button id="replayDemo" type="button">Replay demo</button></details>
-    ${current === 0 ? '<div class="spec"><strong>Robot specs</strong><dl><dt>Drive ports</dt><dd>A + E</dd><dt>Testing speed</dt><dd>50%</dd><dt>Wheel circumference</dt><dd>≈ 27.63 cm</dd></dl></div><div id="partPanel"></div>' : ''}
-    ${current === 5 ? '<div id="quiz"></div>' : ''}
-    <details><summary>${current === 5 ? 'Judge reflection questions' : 'Level briefing'}</summary><ul class="tasks">${m.tasks.map(task => '<li>' + task + '</li>').join('')}</ul><p>${m.experiment}</p></details>`;
-  get('missionTools').innerHTML = `<details class="prediction"><summary>Make a prediction</summary><label for="prediction">${predictions[current]}</label><textarea id="prediction" rows="2" maxlength="250" placeholder="I think…"></textarea></details>
-    <details><summary>Hints</summary><button id="hint" type="button"></button><ol id="hintList"></ol></details>
-    <details><summary>Bonus challenge ${record().bonus ? '✓' : ''}</summary><p>${bonuses[current]}</p><p>${m.extension}</p><button id="bonus" type="button" ${record().bonus ? 'disabled' : ''}>${record().bonus ? 'Bonus recorded' : 'Record my bonus practice'}</button></details>`;
-  const prediction = get<HTMLTextAreaElement>('prediction');
-  prediction.value = record().prediction ?? '';
-  prediction.oninput = () => { record().prediction = prediction.value; if (!teaching) persist(); };
-  button('hint').onclick = () => { record().hints++; if (!teaching) persist(); refreshHints(); };
-  button('bonus').onclick = () => {
-    record().bonus = true;
+  get('missionTools').textContent = '';
+  if (current === 5) {
+    renderQuiz();
+  } else {
+    const guide = guides[current];
+    get('missionText').innerHTML = `<div class="guided-intro"><strong>Build it one block at a time</strong>
+      <p>Drag each new block from the named category. Snap it below the last block. Click a number or menu on a block to change it.</p>
+      <button id="showExample" type="button">Show me how</button></div>
+      <ol class="guide-steps">${guide.steps.map((step, i) => {
+        const right = step.block.inputs?.COND.block?.type === 'lab_gt';
+        const threshold = right ? 90 : 0;
+        const compare = right ? '&gt;' : '&lt;';
+        const nested = step.block.type === 'lab_until' ? `<span class="block-example operators"><span class="block-example sensors">yaw angle</span> ${compare} <b>${threshold}</b></span>` : '';
+        return `<li><p>Open <strong>${step.category}</strong>. Drag this block and snap it below <strong>${i === 0 ? 'When program starts' : 'the block you just added'}</strong>.</p>
+          <div class="block-example ${step.category.toLowerCase()}">${escape(step.example).replace(/\[([^\]]+)\]/g, '<b>$1</b>')}${nested}</div>
+          <p>${step.instruction}</p>
+          ${nested ? `<ol class="nest-steps"><li>Open <strong>Operators</strong>. Drag the <strong>${compare}</strong> comparison into the empty slot on <strong>wait until</strong>.</li><li>Open <strong>Sensors</strong>. Drag <strong>yaw angle</strong> into the left number slot on the green block.</li><li>Click the number on the right and enter <strong>${threshold}</strong>.</li></ol>` : ''}
+        </li>`;
+      }).join('')}</ol>
+      <p><strong>Press Run Robot.</strong> ${guide.observe}</p>
+      <p class="try-next"><strong>Try this next.</strong> ${guide.experiment}</p>
+      ${current === 0 ? '<div id="partPanel"></div>' : ''}
+      <form id="reflectionForm"><label for="reflection"><strong>Answer after you run</strong><br>${guide.question}</label>
+        <textarea id="reflection" rows="2" maxlength="400" required placeholder="I noticed…"></textarea>
+        <button id="finishExperiment" type="submit" class="primary">Next Level</button>
+        <p id="experimentReady" aria-live="polite"></p>
+      </form>`;
+    const reflection = get<HTMLTextAreaElement>('reflection');
+    reflection.value = record().reflection ?? '';
+    reflection.oninput = () => {
+      record().reflection = reflection.value;
+      if (!teaching) persist();
+      updateExperimentReady();
+    };
+    get<HTMLFormElement>('reflectionForm').onsubmit = event => {
+      event.preventDefault();
+      if (!record().triedExperiment || !reflection.value.trim()) return;
+      if (record().complete) switchMission(current + 1);
+      else completeLevel();
+    };
+    updateExperimentReady();
+    updateParts();
+  }
+  button('showExample').onclick = () => {
+    const hasWork = workspace.getAllBlocks(false).some(block => block.type !== 'lab_start');
+    if (hasWork && !confirm('Replace the blocks in this workspace with the example?')) return;
+    sim.reset();
+    clearTrails();
+    record().code = exampleProgram(Math.min(current, 4));
+    loadCode();
     if (!teaching) persist();
-    button('bonus').disabled = true;
-    button('bonus').textContent = 'Bonus recorded';
-    navigation();
+    report('Example loaded. Press Run Robot to see it work.');
   };
-  const demoPanel = get('demo').parentElement as HTMLDetailsElement;
-  demoPanel.addEventListener('toggle', () => {
-    if (demoPanel.isConnected && demoPanel.open) demoStart = performance.now();
-  });
-  button('replayDemo').onclick = () => { demoStart = performance.now(); };
-  drawDemo(get<HTMLCanvasElement>('demo'), current, 1);
-  updateParts();
-  renderChecks();
-  renderQuiz();
-  refreshHints();
+  navigation();
+}
+function updateExperimentReady() {
+  const submit = document.getElementById('finishExperiment') as HTMLButtonElement | null;
+  if (!submit) return;
+  const level = record();
+  submit.disabled = !(level.triedExperiment && level.reflection?.trim());
+  get('experimentReady').textContent = !level.triedExperiment ? 'Run your blocks first.' : !level.reflection?.trim() ? 'Write what you noticed to continue.' : 'Ready for the next level.';
 }
 function renderQuiz() {
-  const panel = document.getElementById('quiz');
-  if (!panel) return;
-  panel.innerHTML = `<details ${record().complete ? '' : 'open'}><summary>Judge quiz</summary><form id="quizForm">${quiz.map((q, i) => `<fieldset><legend>${q.question}</legend>${q.options.map((option, j) => `<label><input type="radio" name="q${i}" value="${j}" ${session().answers[i] === j ? 'checked' : ''} required> ${option}</label>`).join('')}</fieldset>`).join('')}<button type="submit" class="primary">Check answers</button></form></details>`;
+  const saved = session();
+  if (!saved.quizOrder) {
+    saved.answers = {};
+    saved.quizOrder = championQuiz.map(({ options }) => {
+      const order = options.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      return order;
+    });
+    if (!teaching) persist();
+  }
+  get('missionText').innerHTML = `<p>Pick one answer for each question. Use the robot to test a prediction if you get stuck.</p>
+    <button id="showExample" type="button">Show me how</button>
+    <p>This loads the full Level 5 program so you can test your ideas.</p>
+    <form id="quizForm">${championQuiz.map((q, i) => `<fieldset><legend>${i + 1}. ${q.question}</legend>
+      ${saved.quizOrder![i].map(j => `<label><input type="radio" name="q${i}" value="${j}" ${saved.answers[i] === j ? 'checked' : ''} required> ${escape(q.options[j])}</label>`).join('')}
+      <p id="quizNote${i}" class="quiz-note" aria-live="polite"></p></fieldset>`).join('')}
+      <button type="submit" class="primary">Check answers</button></form>`;
   const form = get<HTMLFormElement>('quizForm');
-  form.onchange = () => {
-    new FormData(form).forEach((value, name) => { session().answers[Number(name.slice(1))] = Number(value); });
+  form.onchange = event => {
+    const field = event.target as HTMLInputElement;
+    const i = Number(field.name.slice(1));
+    saved.answers[i] = Number(field.value);
+    get('quizNote' + i).textContent = '';
     if (!teaching) persist();
   };
   form.onsubmit = event => {
     event.preventDefault();
+    updateClock();
     record().attempts++;
-    const checks = quiz.map((q, i) => ({ passed: session().answers[i] === q.answer, feedback: 'Think back to what you observed in the arena.' }));
-    evaluateChecks(checks);
-    if (checks.every(check => check.passed)) completeLevel();
-    else report('Review the goals marked with an ×, then try the quiz again.', 'retry');
-    refreshHints();
+    const correct = championQuiz.filter((q, i) => {
+      const passed = saved.answers[i] === 0;
+      const note = get('quizNote' + i);
+      note.dataset.correct = String(passed);
+      note.textContent = passed ? '✓ Correct' : 'Try again. ' + q.explanation;
+      return passed;
+    }).length;
+    if (!teaching) persist();
+    if (correct === championQuiz.length) completeLevel();
+    else report(`${correct} of ${championQuiz.length} correct. Read the explanations and try again.`, 'retry');
   };
 }
-function evaluateChecks(checks: ObjectiveCheck[]) {
-  updateClock();
-  const entry = record();
-  const passed = checks.filter(check => check.passed).length;
-  if (entry.bestChecks != null && passed > entry.bestChecks) entry.improved = true;
-  entry.bestChecks = Math.max(entry.bestChecks ?? 0, passed);
-  entry.checks = checks;
-  if (!teaching) persist();
-  renderChecks();
-  navigation();
-}
+
 function playCelebration() {
   if (!settings.sound) return;
   try {
@@ -512,7 +526,8 @@ function playCelebration() {
 }
 function completeLevel() {
   const level = record();
-  report('You met every objective and earned the ' + badges[current] + ' badge.', 'success');
+  updateClock();
+  report('You earned the ' + badges[current] + ' badge.', 'success');
   if (level.complete) return;
   level.complete = true;
   level.elapsed = Math.max(0, Date.now() - (level.started || Date.now()));
@@ -534,41 +549,42 @@ button('celebrateNext').onclick = () => {
   if (current < 5) switchMission(current + 1);
   else showSummary();
 };
-function finishRun() {
-  if (inTutorial()) {
-    if (tutorialStep === 4 && sim.state === 'done') advanceTutorial(5);
-    report(sim.state === 'done' ? 'Practice run finished. Reset the robot to finish training.' : sim.message, sim.state === 'done' ? 'success' : 'retry');
-    return;
+﻿function finishRun(stopped = false) {
+  updateClock();
+  const ranAnAction = sim.history.length > 0 || sim.time > 0;
+  const moved = Math.abs(sim.wheelLeft) + Math.abs(sim.wheelRight) > 0.0001;
+  const observation = moved
+    ? `The robot traveled ${sim.travel.toFixed(1)} cm and finished at yaw ${sim.yaw.toFixed(1)}°. The wheels are stopped.`
+    : 'The robot stayed at the start.';
+  const settingsOnly = sim.history.length > 0 && sim.history.every(entry => ['ports', 'speed', 'calibrate'].includes(entry.command.kind));
+  const setupNote = settingsOnly ? ` Current settings: ${sim.ports}, ${sim.speed}%, ${sim.circumference} cm per rotation.` : '';
+  const message = [stopped ? 'You stopped the program.' : sim.message, observation + setupNote].filter(Boolean).join(' ');
+  if (current < 5 && ranAnAction) {
+    record().triedExperiment = true;
+    record().runNote = message;
+    if (!teaching) persist();
+    updateExperimentReady();
   }
-  if (current === 5) {
-    report(sim.state === 'done' ? 'Run finished. Use the judge quiz to complete this level.' : sim.message, sim.state === 'done' ? '' : 'retry');
-    return;
-  }
-  evaluateChecks(checkObjectives(current, sim, record().inspected.length));
-  const result = validate(current, sim, record().inspected.length);
-  if (result.ok) completeLevel();
-  else report(result.message, 'retry');
+  report(message, stopped ? 'stopped' : sim.state === 'error' ? 'retry' : 'observed');
 }
 function startRun(step: boolean) {
-  if (inTutorial() && tutorialStep !== 4) return;
   if (current === 2 && arena && sim.travel > 0.14) get('previousTrail').hidden = false;
   sim.reset();
-  arena?.clear(!inTutorial() && current === 2);
-  if (!inTutorial()) record().attempts++;
+  arena?.clear(current === 2);
+  record().attempts++;
   saveCode();
-  refreshHints();
   try {
-    sim.start(inTutorial() ? compileTutorial(workspace) : compile(workspace));
+    sim.start(compile(workspace, { runUntilUnfinishedBlock: true }));
+    priorState = 'running';
     if (step) sim.step();
     report('Watch the highlighted block and the arena.', 'running');
   } catch (error) {
-    if (!inTutorial() && current < 5) evaluateChecks(checkObjectives(current, sim, record().inspected.length));
     report(error instanceof Error ? error.message : 'Check your block connections.', 'retry');
   }
 }
+
 button('run').onclick = () => startRun(false);
 button('step').onclick = () => {
-  if (inTutorial()) return;
   if (sim.state === 'paused' || sim.state === 'running') sim.step();
   else startRun(true);
 };
@@ -579,60 +595,20 @@ button('pause').onclick = () => {
 };
 button('stop').onclick = () => {
   sim.stop();
-  if (!inTutorial() && current < 5) evaluateChecks(checkObjectives(current, sim, record().inspected.length));
-  report('Edit your blocks and try again when you’re ready.', 'stopped');
+  finishRun(true);
 };
 button('resetRobot').onclick = () => {
   sim.reset();
   clearTrails();
-  if (inTutorial() && tutorialStep === 5) {
-    advanceTutorial(6);
-    report('✓ Practice goal met. You ran your program and reset the robot.', 'success');
-  } else report('Robot returned to the start.');
+  report('Robot returned to the start.');
 };
 button('resetMission').onclick = () => {
   if (!confirm('Reset this level’s program and progress? Your personal best stays saved.')) return;
   const best = record().best;
   session().missions[current] = { ...fresh(), best };
-  if (current === 5) session().answers = {};
+  if (current === 5) { session().answers = {}; delete session().quizOrder; }
   openLab(current);
 };
-
-function clearTutorialHighlight() {
-  document.querySelectorAll('.training-highlight').forEach(element => element.classList.remove('training-highlight'));
-}
-function renderTutorial() {
-  const [title, description, target] = tutorial[tutorialStep];
-  get('missionMeta').textContent = `TRAINING · STEP ${tutorialStep + 1} OF ${tutorial.length}`;
-  get('missionTitle').textContent = title;
-  get('objective').textContent = description;
-  get('missionText').innerHTML = `<div class="training-steps" aria-hidden="true">${tutorial.map((_, i) => `<i class="${i <= tutorialStep ? 'lit' : ''}"></i>`).join('')}</div>
-    ${tutorialStep === 6 ? '<button id="tutorialDone" class="primary" type="button">✓ Practice goal met · Start Level 1</button>' : '<p class="training-cue">→ Follow the highlighted area.</p>'}`;
-  get('missionTools').innerHTML = '<button id="skipTutorial" type="button">Skip Tutorial</button>';
-  button('skipTutorial').onclick = leaveTutorial;
-  document.getElementById('tutorialDone')?.addEventListener('click', leaveTutorial);
-  clearTutorialHighlight();
-  (target === 'toolbox' ? get('workspace').querySelector('.blocklyToolboxDiv') : document.getElementById(target))?.classList.add('training-highlight');
-}
-function leaveTutorial() {
-  data.tutorialDone = true;
-  delete data.tutorialStep;
-  delete data.tutorialCode;
-  openLab(0);
-}
-function advanceTutorial(step: number) {
-  tutorialStep = data.tutorialStep = step;
-  persist();
-  renderTutorial();
-}
-function checkTutorial() {
-  const waits = workspace.getBlocksByType('lab_wait', false);
-  if (tutorialStep === 1 && waits.length) advanceTutorial(2);
-  const start = workspace.getTopBlocks(false).find(block => block.type === 'lab_start');
-  const connectedWaits = waits.filter(wait => wait.getRootBlock() === start);
-  if (tutorialStep === 2 && connectedWaits.length) advanceTutorial(3);
-  if (tutorialStep === 3 && connectedWaits.some(wait => Number(wait.getFieldValue('VALUE')) === 2)) advanceTutorial(4);
-}
 
 let previous = performance.now(), accumulator = 0, active: string | undefined;
 let lastDisplay = 0, priorState = sim.state, lastHero = 0;
@@ -660,16 +636,9 @@ function frame(now: number) {
       button('pause').disabled = sim.state !== 'paused' && sim.state !== 'running';
       button('pause').textContent = sim.state === 'paused' ? 'Resume' : 'Pause';
       button('stop').disabled = button('pause').disabled;
-      button('step').disabled = inTutorial();
-      button('run').disabled = sim.state === 'running' || sim.state === 'paused' || (inTutorial() && tutorialStep !== 4);
+      button('run').disabled = sim.state === 'running' || sim.state === 'paused';
       if (sim.state !== priorState && (sim.state === 'done' || sim.state === 'error')) finishRun();
       priorState = sim.state;
-    }
-    const demo = document.querySelector<HTMLCanvasElement>('.demo[open] #demo');
-    if (demo && demoStart) {
-      const progress = reducedMotion.matches ? 1 : Math.min(1, (now - demoStart) / 3000);
-      drawDemo(demo, current, Math.max(0, progress));
-      if (progress === 1) demoStart = 0;
     }
     arena?.draw(sim);
   } else if (showcase && now - lastHero > 32) {
@@ -680,7 +649,7 @@ function frame(now: number) {
   }
   requestAnimationFrame(frame);
 }
-setInterval(() => { updateClock(); if (inLab) refreshHints(); }, 300);
+setInterval(updateClock, 300);
 if (data.screen === 'lab' && data.student && data.robot) {
   openLab(data.current);
   if (data.away) { remind(returnReminder()); data.away = false; persist(); }

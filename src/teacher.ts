@@ -1,16 +1,17 @@
-﻿export const reference = [
-  ['Power Up Your Robot', 'Inspect the hub, motors, wheels and yaw sensor. Configure A + E, 50%, and 27.63 cm per rotation.'],
-  ['Return to Base', 'Wait 1 second. Move forward 20 cm, then backward 20 cm.'],
-  ['Drift Challenge', 'Move with steering −40 for 20 rotations.'],
-  ['Precision Turning', 'Reset yaw. Start steering +100, wait until yaw > 90°, then stop. Start steering −100, wait until yaw < 0°, then stop.'],
-  ['The Ultimate Robot Test', 'Set ports A + E, speed 50%, and calibration 27.63 cm per rotation. Wait 1 second. Move forward 20 cm and backward 20 cm. Move with steering −40 for 20 rotations. Reset yaw. Start steering +100, wait until yaw > 90°, stop. Start steering −100, wait until yaw < 0°, stop.'],
-  ['Become a Robotics Champion', 'Quiz answers in order: control the two wheels independently, different left and right wheel motion, heading from the reference, and stopping based on actual heading.'],
+﻿import { championQuiz } from './guides';
+export const reference = [
+  ['Configure your robot', 'Set the drive ports to A + E, movement speed to 50%, and calibration to 27.63 cm per rotation.'],
+  ['Forward and backward', 'Wait 1 second. Move forward 20 cm, then backward 20 cm.'],
+  ['Steering', 'Move with steering −40 for 20 rotations.'],
+  ['Yaw sensor', 'Reset yaw. Start steering +100, wait until yaw > 90°, then stop. Start steering −100, wait until yaw < 0°, then stop.'],
+  ['Complete robot test', 'Set ports A + E, speed 50%, and calibration 27.63 cm per rotation. Wait 1 second. Move forward 20 cm and backward 20 cm. Move with steering −40 for 20 rotations. Reset yaw. Start steering +100, wait until yaw > 90°, stop. Start steering −100, wait until yaw < 0°, stop.'],
+  ['Robotics Champion Quiz', championQuiz.map((question, i) => (i + 1) + '. ' + question.options[0]).join(' · ')],
 ];
 export const criteria = [
-  'All four parts explored. The program applies both ports, 50% speed and 27.63 ± 0.05 cm calibration.',
-  'The first motion begins at 1 ± 0.15 s. The robot reaches the target and reverses to finish within 1.5 cm of the start.',
-  'Positive wheel motion with the left wheel at approximately 20% of the right wheel rate, for 20 ± 0.1 right-wheel rotations.',
-  'Yaw reset before motion. In-place turns use the yaw reporter to stop in (90°, 105°] and [−15°, 0°). Both turns come to a stop.',
-  'The Level 1 drive settings precede the ordered behaviors from Levels 2–4.',
-  'All four quiz answers are correct. Reflection questions are for class discussion.',
+  'Run a program and answer the observation question. The example sets up both ports, speed, and calibration.',
+  'Run a program and answer the observation question. Try equal forward and backward distances of 20, 10, and 30 cm.',
+  'Run a program and answer the observation question. Compare the trails and yaw for the five steering values.',
+  'Run a program and answer the observation question. The example uses two comparisons to stop each turn.',
+  'Run a program and answer the observation question. Compare the official example with the same run at a different speed.',
+  'Answer all 12 questions. Explanations appear after checking answers, and students may retry.',
 ];

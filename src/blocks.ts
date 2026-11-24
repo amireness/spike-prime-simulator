@@ -73,7 +73,7 @@ function reading(block: Blockly.Block | null): Reading {
   if (block?.type === 'lab_number') return { kind: 'number', value: readNumber(block) };
   throw new Error('Fill both sides of the comparison with numbers or sensor readings.');
 }
-export function compile(workspace: Blockly.Workspace): Command[] {
+export function compile(workspace: Blockly.Workspace, { runUntilUnfinishedBlock = false } = {}): Command[] {
   const starts = workspace.getTopBlocks(false).filter(block => block.type === 'lab_start');
   if (starts.length !== 1) throw new Error('Use exactly one When program starts block.');
   if (workspace.getAllBlocks(false).length > 300) throw new Error('This program is too large. Try a smaller test.');
@@ -94,10 +94,15 @@ export function compile(workspace: Blockly.Workspace): Command[] {
         break;
       case 'until': {
         const comparison = block.getInputTargetBlock('COND');
-        if (!comparison || !['lab_gt', 'lab_lt', 'lab_eq'].includes(comparison.type)) throw new Error('Add a comparison inside wait until.');
-        const condition: Condition = { op: comparison.type.slice(4) as Condition['op'],
-          left: reading(comparison.getInputTargetBlock('LEFT')), right: reading(comparison.getInputTargetBlock('RIGHT')) };
-        commands.push({ id, kind, condition });
+        try {
+          if (!comparison || !['lab_gt', 'lab_lt', 'lab_eq'].includes(comparison.type)) throw new Error('Add a comparison inside wait until.');
+          const condition: Condition = { op: comparison.type.slice(4) as Condition['op'],
+            left: reading(comparison.getInputTargetBlock('LEFT')), right: reading(comparison.getInputTargetBlock('RIGHT')) };
+          commands.push({ id, kind, condition });
+        } catch (error) {
+          if (!runUntilUnfinishedBlock || !(error instanceof Error)) throw error;
+          commands.push({ id, kind: 'unfinished', message: error.message });
+        }
         break;
       }
       default: throw new Error('An action in the program could not be read.');
@@ -106,14 +111,3 @@ export function compile(workspace: Blockly.Workspace): Command[] {
   if (!commands.length) throw new Error('Connect at least one action below the start block.');
   return commands;
 }
-
-export function compileTutorial(workspace: Blockly.Workspace): Command[] {
-  const commands = compile(workspace);
-  if (!commands.some(command => command.kind === 'wait' && command.value === 2)) {
-    throw new Error('Connect a wait block set to 2 seconds to your program.');
-  }
-  return commands;
-}
-
-
-

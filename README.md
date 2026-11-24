@@ -2,7 +2,7 @@
 
 **Competition Ready · Lesson 5 · Assembling an Advanced Base**
 
-A 60-minute classroom game for programming a simulated SPIKE Prime driving base. Students name their robot, complete a short Blockly tutorial, and earn badges across six levels. Programs, progress, challenge timing, and personal bests are stored in each student's browser for the site's origin.
+A 60-minute classroom game for programming a simulated SPIKE Prime driving base. Students name their robot, start with the Level 1 guided Blockly experiment, and earn badges across six levels. Programs, progress, challenge timing, and personal bests are stored in each student's browser for the site's origin.
 
 ## Run locally
 
@@ -36,11 +36,10 @@ The workflow runs the tests and builds before publishing. Vite uses relative ass
 
 ## Classroom controls
      
-Choose **Student Challenge Mode** for the countdown. It begins after training and keeps running across refreshes or tab changes. Use **Results** to review saved progress. Practice can continue after time runs out. **Teacher mode** on the welcome screen provides duration and sound settings, independent level previews, validation criteria, and the teacher reference. Settings apply only in that browser.
+Choose **Student Challenge Mode** for the countdown. It begins when the adventure opens and keeps running across refreshes or tab changes. Each experiment includes block-by-block steps, a **Show me how** example, and a reflection question. Use **Results** to review saved progress. Practice can continue after time runs out. **Teacher mode** on the welcome screen provides duration and sound settings, independent level previews, validation criteria, and the teacher reference. Settings apply only in that browser.
 
 Drag blocks from the toolbox and connect them below **When program starts**. Right-click blocks for actions such as Duplicate and Delete. **Run** starts from the starting marker. **Pause** holds the robot and program. **Step** completes one action, including any movement or wait in that action. **Stop** ends the current run and keeps its trail. **Reset robot** clears the arena run. **Reset level** clears that level's saved program and progress and keeps its personal best.
 
 Drag in the arena to orbit and scroll to zoom. Use **Top** to compare the trail with the centimeter grid. Relative yaw increases when turning right and decreases when turning left. The simulator applies an ideal differential-drive model with no wheel slip. For beginners, the rotation count on a steering move measures the faster wheel. A wait-until times out after 15 simulated seconds if its condition stays false.
 
 Validation tests exercise the driving model and mission checkpoints. Test files are outside the production build.
-

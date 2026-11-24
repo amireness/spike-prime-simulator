@@ -192,3 +192,36 @@ dialog::backdrop { background: #20184d99; }
 @media (prefers-reduced-motion: reduce) {
   .training-highlight, .confetti i { animation: none; }
 }
+
+.guided-intro { margin: 12px 0; }
+.guided-intro button, #showExample { margin: 7px 0; }
+.guide-steps { display: grid; gap: 10px; padding-left: 24px; }
+.guide-steps > li { padding: 7px; border-radius: 8px; background: #f2f5ff; }
+.guide-steps > li::marker { color: #5036dc; font-weight: 800; }
+.block-example {
+  display: inline-block;
+  margin: 5px 0;
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: white;
+  font-size: .88rem;
+  font-weight: 750;
+  background: #c33479;
+}
+.block-example b { display: inline-block; border-radius: 4px; padding: 0 4px; color: #26305a; background: #fff; }
+.block-example.control { background: #a54e13; }
+.block-example.sensors { background: #067b98; }
+.block-example.operators { background: #25815a; }
+.block-example .block-example { margin: 2px 0 1px; }
+.nest-steps { padding-left: 20px; margin-top: 5px; }
+.nest-steps li + li { margin-top: 4px; }
+.try-next { margin-top: 8px; padding: 7px; border-radius: 8px; background: #fff1d2; }
+#reflectionForm { display: grid; gap: 6px; margin-top: 14px; }
+#reflection { width: 100%; border: 1px solid #aab8dc; border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+#experimentReady { color: var(--muted); font-size: .88rem; }
+#quizForm label { cursor: pointer; }
+.quiz-note { color: #a03c28; font-size: .88rem; }
+.quiz-note[data-correct=true] { color: #087258; }
+@media (min-width: 1051px) {
+  #lab .mission { max-height: calc(clamp(360px, 58vh, 700px) + 128px); overflow: auto; }
+}

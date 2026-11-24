@@ -153,18 +153,20 @@ export function createArena(container: HTMLElement, onPart: (part: Part) => void
   controls.maxDistance = 220;
   controls.zoomSpeed = 0.85;
   controls.target.set(0, 1.4, 15);
+  const follow = new T.Vector3();
   const iso = () => {
+    follow.set(0, 0, 0);
     if (showcase) { camera.position.set(20, 23, 49); controls.target.set(0, 4, 25); }
     else { camera.position.set(25, 29, 49); controls.target.set(0, 2, 19); }
     controls.update();
   };
-  const top = () => { camera.position.set(0, 85, 15.002); controls.target.set(0, 0, 15); controls.update(); };
+  const top = () => { follow.set(0, 0, 0); camera.position.set(0, 85, 15.002); controls.target.set(0, 0, 15); controls.update(); };
   iso();
   scene.add(new T.HemisphereLight(0xe5f5ff, 0x8893a9, 2.4));
   const light = new T.DirectionalLight(0xffefdb, 2.35);
   light.position.set(-25, 50, 22);
   scene.add(light);
-  box(scene, [400, 0.2, 400], [0, -0.15, 0], material(0xe5edfa));
+  box(scene, [1600, 0.2, 1600], [0, -0.15, 0], material(0xe5edfa));
   box(scene, [22, 0.03, 16], [0, -0.037, START.z], material(0xb4c9f4));
   box(scene, [13, 0.03, 10], [0, -0.037, START.z - 20], material(0xffdaa1));
   for (const x of [-15, 15]) {
@@ -172,7 +174,7 @@ export function createArena(container: HTMLElement, onPart: (part: Part) => void
   }
   const minor = new T.GridHelper(160, 160, 0xc4d2e8, 0xc4d2e8);
   minor.position.y = -0.025; scene.add(minor);
-  const major = new T.GridHelper(160, 16, 0x6682bb, 0xa5bada);
+  const major = new T.GridHelper(1600, 160, 0x6682bb, 0xa5bada);
   major.position.y = 0; scene.add(major);
   for (let distance = -60; distance <= 70; distance += 10) {
     label(scene, distance + ' cm', [-20, 0.025, START.z - distance], '#476297', 8);
@@ -265,6 +267,17 @@ export function createArena(container: HTMLElement, onPart: (part: Part) => void
       wheels[0].rotation.x = left;
       wheels[1].rotation.x = right;
       if (trailEnabled && Math.hypot(sim.pose.x - lastX, sim.pose.z - lastZ) > 0.14) addPoint(sim.pose.x, sim.pose.z);
+      if (!showcase) {
+        const dx = sim.pose.x, dz = sim.pose.z - START.z;
+        const distance = Math.hypot(dx, dz);
+        const fraction = distance > 24 ? (distance - 24) / distance : 0;
+        const x = dx * fraction, z = dz * fraction;
+        camera.position.x += x - follow.x;
+        camera.position.z += z - follow.z;
+        controls.target.x += x - follow.x;
+        controls.target.z += z - follow.z;
+        follow.set(x, 0, z);
+      }
       controls.update();
       if (dirty) {
         renderer.render(scene, camera);

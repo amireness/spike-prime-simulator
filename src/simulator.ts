@@ -5,6 +5,7 @@ export type Command = { id: string } & (
   | { kind: 'speed' | 'calibrate' | 'drive' | 'wait'; value: number }
   | { kind: 'move'; steering: number; amount: number; unit: 'cm' | 'rot'; direction: number }
   | { kind: 'until'; condition: Condition }
+  | { kind: 'unfinished'; message: string }
   | { kind: 'stop' | 'zero' }
 );
 export type Pose = { x: number; z: number; angle: number };
@@ -111,6 +112,7 @@ export class Simulator {
       this.entry = this.sample();
       this.sensor = false;
       switch (command.kind) {
+        case 'unfinished': this.fail(command.message); return;
         case 'ports': this.ports = command.value; break;
         case 'speed': this.speed = command.value; break;
         case 'calibrate': this.circumference = command.value; break;

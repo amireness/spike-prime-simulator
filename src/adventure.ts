@@ -16,16 +16,6 @@ export const bonuses = [
   'Try the full test at a different speed. Compare the final heading with your first run.',
   'Sketch an attachment and describe how you would test it with this base.',
 ];
-export const tutorial = [
-  ['Find a block', 'Open the orange Control category.', 'toolbox'],
-  ['Drag a block', 'Drag a wait block into the workspace. Drop it in an empty spot.', 'toolbox'],
-  ['Connect it', 'Snap the wait block directly below When program starts.', 'workspace'],
-  ['Change a number', 'Click the number on your wait block. Set it to 2 seconds and press Enter.', 'workspace'],
-  ['Run your robot', 'Press Run Robot. Watch the wait block light up while it runs.', 'run'],
-  ['Reset your robot', 'Press Reset Robot to bring it back to the start.', 'resetRobot'],
-  ['Read your result', 'The green check means you met the practice goal. Select it to start Level 1.', 'tutorialDone'],
-];
-
 export type Clock = { startedAt: number; durationMs: number; finishedAt?: number };
 export const deadline = (clock: Clock) => clock.startedAt + clock.durationMs;
 export function remaining(clock: Clock, now: number) {
