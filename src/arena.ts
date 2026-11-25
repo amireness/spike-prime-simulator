@@ -154,13 +154,20 @@ export function createArena(container: HTMLElement, onPart: (part: Part) => void
   controls.zoomSpeed = 0.85;
   controls.target.set(0, 1.4, 15);
   const follow = new T.Vector3();
+  let myBlocks = false;
   const iso = () => {
     follow.set(0, 0, 0);
     if (showcase) { camera.position.set(20, 23, 49); controls.target.set(0, 4, 25); }
+    else if (myBlocks) { camera.position.set(77, 86, 99); controls.target.set(22, 0, 2); }
     else { camera.position.set(25, 29, 49); controls.target.set(0, 2, 19); }
     controls.update();
   };
-  const top = () => { follow.set(0, 0, 0); camera.position.set(0, 85, 15.002); controls.target.set(0, 0, 15); controls.update(); };
+  const top = () => {
+    follow.set(0, 0, 0);
+    const x = myBlocks ? 22 : 0, z = myBlocks ? 0 : 15;
+    camera.position.set(x, myBlocks ? 125 : 85, z + 0.002);
+    controls.target.set(x, 0, z); controls.update();
+  };
   iso();
   scene.add(new T.HemisphereLight(0xe5f5ff, 0x8893a9, 2.4));
   const light = new T.DirectionalLight(0xffefdb, 2.35);
@@ -168,9 +175,13 @@ export function createArena(container: HTMLElement, onPart: (part: Part) => void
   scene.add(light);
   box(scene, [1600, 0.2, 1600], [0, -0.15, 0], material(0xe5edfa));
   box(scene, [22, 0.03, 16], [0, -0.037, START.z], material(0xb4c9f4));
-  box(scene, [13, 0.03, 10], [0, -0.037, START.z - 20], material(0xffdaa1));
+  const driving = new T.Group();
+  const course = new T.Group();
+  scene.add(driving, course);
+  course.visible = false;
+  box(driving, [13, 0.03, 10], [0, -0.037, START.z - 20], material(0xffdaa1));
   for (const x of [-15, 15]) {
-    box(scene, [0.6, 0.02, 64], [x, -0.032, 10], material(0x809ae1));
+    box(driving, [0.6, 0.02, 64], [x, -0.032, 10], material(0x809ae1));
   }
   const minor = new T.GridHelper(160, 160, 0xc4d2e8, 0xc4d2e8);
   minor.position.y = -0.025; scene.add(minor);
@@ -183,9 +194,24 @@ export function createArena(container: HTMLElement, onPart: (part: Part) => void
   const targetColor = new T.MeshBasicMaterial({ color: 0xffa117 });
   ring(scene, 3.7, 0.19, [START.x, 0.07, START.z], startColor, 'y');
   label(scene, 'START', [-7, 0.08, START.z], '#2649ba', 8);
-  ring(scene, 2.2, 0.19, [START.x, 0.07, START.z - 20], targetColor, 'y');
-  ring(scene, 0.58, 0.19, [START.x, 0.07, START.z - 20], targetColor, 'y');
-  label(scene, '20 cm', [-5.5, 0.08, START.z - 20], '#90520d', 7);
+  ring(driving, 2.2, 0.19, [START.x, 0.07, START.z - 20], targetColor, 'y');
+  ring(driving, 0.58, 0.19, [START.x, 0.07, START.z - 20], targetColor, 'y');
+  label(driving, '20 cm', [-5.5, 0.08, START.z - 20], '#90520d', 7);
+  const courseLine = material(0x8b64bc);
+  for (const edge of [-25, 25]) box(course, [50, 0.03, 0.7], [25, 0.022, edge], courseLine);
+  for (const edge of [0, 50]) box(course, [0.7, 0.03, 50], [edge, 0.022, 0], courseLine);
+  for (const distance of [0, 25, 50]) {
+    const z = START.z - distance;
+    box(course, [7, 0.03, 0.5], [0, 0.05, z], courseLine);
+    label(course, distance + ' cm', [-7, 0.08, z - 4], '#604180', 8);
+  }
+  for (const [name, z] of [['A', 25], ['B', -25]] as const) {
+    const x = -13;
+    cylinder(course, 3.6, 0.8, [x, 0.4, z], cyan);
+    for (const side of [-1, 1]) beam(course, 5, [x + side * 2.25, 4.3, z], pink, Math.PI / 2);
+    for (const y of [1.4, 7.2]) beam(course, 4, [x, y, z], pink, 0);
+    label(course, name, [x, 0.05, z + 4], '#604180', 5);
+  }
 
   const { robot, wheels } = buildRobot();
   scene.add(robot);
@@ -249,6 +275,13 @@ export function createArena(container: HTMLElement, onPart: (part: Part) => void
   new ResizeObserver(resize).observe(container);
   resize();
   return {
+    setCourse(enabled: boolean) {
+      if (myBlocks === enabled) return;
+      myBlocks = enabled;
+      course.visible = enabled;
+      driving.visible = !enabled;
+      iso();
+    },
     iso, top, clear,
     zoom(factor: number) {
       const offset = camera.position.clone().sub(controls.target);

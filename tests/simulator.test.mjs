@@ -108,3 +108,36 @@ test('pause, step, stop and reset preserve or clear motion as appropriate', () =
   assert.deepEqual(sim.pose, START);
   assert.equal(sim.travel, 0);
 });
+
+test('signed yaw wraps at a half turn while heading remains continuous', () => {
+  const right = run([command('drive', { value: 100 }), command('wait', { value: 1 }), command('stop')]);
+  const left = run([command('drive', { value: -100 }), command('wait', { value: 1 }), command('stop')]);
+  assert.ok(right.pose.angle > Math.PI && right.yaw < 0);
+  assert.ok(left.pose.angle < -Math.PI && left.yaw > 0);
+  near(right.yaw, -left.yaw);
+  const reset = run([command('drive', { value: 100 }), command('wait', { value: 1 }), command('stop'), command('zero')]);
+  near(reset.yaw, 0);
+  near(reset.pose.angle, right.pose.angle);
+});
+
+test('live yaw equality finds exact angles at varying tick sizes and signs', () => {
+  for (const degrees of [45, 90, 135, -45, -90, -135]) {
+    const sim = new Simulator();
+    sim.start([command('zero'), command('drive', { value: Math.sign(degrees) * 100 }), until('eq', degrees), command('stop')]);
+    for (let i = 0; i < 100 && sim.state === 'running'; i++) sim.tick(0.09);
+    assert.equal(sim.state, 'done');
+    near(sim.yaw, degrees);
+    assert.equal(sim.left, 0);
+    assert.equal(sim.right, 0);
+    assert.ok(sim.history[2].after.time > sim.history[2].before.time);
+  }
+});
+
+test('a wrong-direction comparison stops before wrapping into a false success', () => {
+  const sim = run([command('drive', { value: -100 }), until('gt', 90), command('stop')]);
+  assert.equal(sim.state, 'error');
+  assert.match(sim.message, /turning away from the target angle/);
+  assert.ok(sim.time < 1);
+  assert.equal(sim.left, 0);
+  assert.equal(sim.right, 0);
+});

@@ -1,19 +1,27 @@
 import * as Blockly from 'blockly';
-import { blankWorkspace, compile, createWorkspace } from './blocks';
+import { blankWorkspace, compile, compileMyBlocks, createWorkspace, lessonToolbox } from './blocks';
 import { createArena } from './arena';
 import { missions, parts, type Part } from './missions';
 import { Simulator, START } from './simulator';
 import { badges, levelIcons, remaining, finishClock, formatTime, totalXP, type Clock } from './adventure';
 import { exampleProgram, championQuiz } from './guides';
 import { experiments, comprehension, type Experiment, type LessonQuestion } from './experiments';
+import { myExperiments, myBlocksReference, myQuiz, blockLabel, type MyExperiment } from './my-blocks-lesson';
+import type { Block } from './guides';
+import { lessonFiveAnswers } from './teacher';
 import './style.css';
 import './game.css';
 
-document.title = 'Robot Academy: Advanced Base Challenge';
+document.title = 'Robot Academy: SPIKE Prime Simulator';
+const lessonTitles = { 5: 'Advanced Driving Base', 6: 'My Blocks' };
+const myActivities = ['Movement Review', 'Create Your First My Block', 'Button Controller', 'Square Challenge', 'Robot Navigator', 'Championship Quiz'];
+let lesson: 5 | 6 = 5;
+const activities = () => lesson === 5 ? missions : myActivities.map(title => ({ title, objective: '' }));
+const championship = () => lesson === 5 ? championQuiz : myQuiz;
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <header class="masthead">
-    <button id="home" class="brand" type="button"><span class="brandmark" aria-hidden="true">✦</span><span>Robot Academy</span></button>
+    <button id="home" class="brand" type="button"><span class="brandmark" aria-hidden="true">✦</span><span>Home</span></button>
     <div id="gameStats" class="game-stats" hidden>
       <span id="identity"></span><span id="xp" class="stat"></span>
       <span id="timer" class="stat" role="timer" hidden></span>
@@ -23,32 +31,31 @@ app.innerHTML = `
   <main id="welcome">
     <section class="welcome-hero">
       <div class="welcome-copy">
-        <p class="eyebrow">ROBOT ACADEMY</p><h1>Advanced Base<br>Challenge</h1>
-        <p>Build a program, put your robot to the test, and earn six badges.</p>
-        <p id="durationBanner" class="duration"></p>
+        <p class="eyebrow">ROBOT ACADEMY</p><h1>Choose a lesson</h1>
+        <nav id="lessonSelect" class="lesson-select" aria-label="Lessons"></nav>
         <form id="startForm">
           <label>Your name<input id="studentName" maxlength="30" required autocomplete="given-name" placeholder="e.g. Alex"></label>
           <label>Robot name<input id="robotName" maxlength="24" required placeholder="e.g. Bolt"></label>
           <label class="mode-choice"><input id="timedChoice" type="checkbox" checked> Student Challenge Mode</label>
-          <button id="start" type="submit" class="primary">Start Adventure</button>
+          <button id="start" type="submit" class="primary">Start lesson</button>
         </form>
-        <button id="teacher" type="button" class="teacher-link">Teacher mode</button>
+        <button id="teacher" type="button" class="teacher-link">Teacher mode</button> <button id="newSession" type="button" class="quiet">New student session</button>
       </div>
-      <div id="showcase"><div class="hero-caption"><b>ADVANCED DRIVING BASE</b><span>SPIKE Prime · Lesson 5</span></div></div>
+      <div id="showcase"><div class="hero-caption"><b>ADVANCED DRIVING BASE</b><span>SPIKE Prime</span></div></div>
     </section>
-    <h2 class="map-title">Adventure map</h2><nav id="welcomeMap" class="level-map" aria-label="Adventure map"></nav>
+    <nav id="welcomeMap" class="level-map" aria-label="Activity progress"></nav>
   </main>
   <main id="lab" hidden>
     <nav id="missionNav" class="level-map" aria-label="Levels"></nav>
     <div id="returnNote" class="return-note" role="status" hidden></div>
     <div class="lab-grid">
       <section class="mission" aria-label="Experiment instructions">
-        <div class="brief-main"><div id="missionMeta" class="eyebrow"></div><h1 id="missionTitle"></h1><p id="objective"></p></div>
-        <div class="feedback"><strong id="runStatus">Ready to run</strong><div id="feedback" role="status"></div><button id="next" class="primary" type="button" hidden>Next Level</button></div>
-        <div id="briefDetails"><div id="missionText"></div><div id="missionTools"></div></div>
+        <div class="brief-main"><div id="missionMeta" class="eyebrow"></div><h1 id="missionTitle"></h1></div>
+        <div class="feedback"><strong id="runStatus">Ready to run</strong><div id="feedback" role="status"></div><button id="next" class="primary" type="button" hidden>Next activity</button></div>
+        <div id="missionText"></div>
       </section>
       <section class="lab-card editor" aria-labelledby="editorTitle">
-        <div class="card-head"><h2 id="editorTitle">Programming bay</h2><button id="resetMission" class="quiet" type="button">Reset level</button></div>
+        <div class="card-head"><h2 id="editorTitle">Programming bay</h2><button id="resetMission" class="quiet" type="button">Reset activity</button></div>
         <div id="workspace" aria-label="Blockly programming workspace"></div>
         <div class="runbar"><button id="run" class="primary" type="button">▶ Run Robot</button><button id="pause" type="button">Pause</button><button id="step" type="button">Step</button><button id="stop" type="button">Stop</button><button id="resetRobot" type="button">Reset Robot</button></div>
       </section>
@@ -58,19 +65,18 @@ app.innerHTML = `
           <div class="camera"><button id="iso" aria-pressed="true" type="button">3D</button><button id="top" aria-pressed="false" type="button">Top</button><button id="zoomIn" aria-label="Zoom in" type="button">+</button><button id="zoomOut" aria-label="Zoom out" type="button">−</button></div>
           <div class="arena-legend"><span><i class="legend-start"></i>Start</span><span><i class="legend-target"></i>Target</span><span><i class="legend-trail"></i>Trail</span><span id="previousTrail" hidden><i class="legend-previous"></i>Previous trail</span></div>
         </div>
-        <div class="telemetry"><div><span>Yaw</span><b id="yaw">0.0°</b></div><div><span>Motor speed L / R</span><b id="speed">0 / 0%</b></div><div><span>Distance</span><b id="distance">0.0 cm</b></div></div>
+        <div id="hubButtons" class="hub-buttons" hidden><button id="hubLeft" type="button" disabled>◀ Left hub button</button><button id="hubRight" type="button" disabled>Right hub button ▶</button></div><div class="telemetry"><div><span>Yaw</span><b id="yaw">0.0°</b></div><div><span>Motor speed L / R</span><b id="speed">0 / 0%</b></div><div><span>Distance</span><b id="distance">0.0 cm</b></div></div>
       </section>
     </div>
   </main>
-  <dialog id="celebration"><div class="confetti" aria-hidden="true"></div><div class="modal-inner"><div id="earnedIcon" class="earned-icon" aria-hidden="true"></div><p class="eyebrow">BADGE EARNED</p><h2>LEVEL COMPLETE</h2><p id="earnedBadge"></p><p id="earnedDetails"></p><div class="modal-actions"><button id="keepPractice" type="button">Keep practicing</button><button id="celebrateNext" class="primary" type="button">Next Level</button></div></div></dialog>
+  <dialog id="celebration"><div class="confetti" aria-hidden="true"></div><div class="modal-inner"><div id="earnedIcon" class="earned-icon" aria-hidden="true"></div><p class="eyebrow">BADGE EARNED</p><h2>ACTIVITY COMPLETE</h2><p id="earnedBadge"></p><p id="earnedDetails"></p><div class="modal-actions"><button id="keepPractice" type="button">Keep practicing</button><button id="celebrateNext" class="primary" type="button">Next activity</button></div></div></dialog>
   <dialog id="summary"><div class="modal-inner"><p class="eyebrow">ADVENTURE RESULTS</p><h2 id="summaryTitle"></h2><div id="summaryBody"></div><div class="modal-actions"><button id="summaryClose" class="primary" type="button">Continue practice</button></div></div></dialog>
   <dialog id="teacherPanel"><div class="modal-inner"><p class="eyebrow">INSTRUCTOR TOOLS</p><h2>Teacher mode</h2>
     <p>Settings apply on this browser. Previews have their own workspace.</p>
     <div class="teacher-settings"><label>Challenge duration (minutes)<input id="teacherDuration" type="number" min="1" max="180" required></label>
     <label><input id="teacherSound" type="checkbox"> Celebration sound</label><button id="saveSettings" class="primary" type="button">Save settings</button></div>
-    <h3>Preview a level</h3><div id="teacherLevels" class="teacher-levels"></div>
-    <details><summary>Validation criteria</summary><div id="teacherCriteria"></div></details>
-    <button id="teacherReference" type="button">View teacher reference</button><div id="referenceContent" hidden></div>
+    <h3>Preview an activity</h3><div id="teacherLevels" class="teacher-levels"></div>
+    <button id="teacherReference" type="button">View quiz answer key</button><div id="referenceContent" hidden></div>
     <div class="modal-actions"><button id="resetSession" class="danger" type="button">Reset student session</button><button id="teacherClose" type="button">Close</button></div>
   </div></dialog>`;
 
@@ -78,11 +84,12 @@ const get = <T extends HTMLElement = HTMLElement>(id: string) => document.getEle
 const button = (id: string) => get<HTMLButtonElement>(id);
 const input = (id: string) => get<HTMLInputElement>(id);
 const dialog = (id: string) => get<HTMLDialogElement>(id);
-const key = 'spike-prime-lab-v1';
+const legacyKey = 'spike-prime-lab-v1';
+const lessonKey = (number: 5 | 6) => 'robot-academy-lesson-' + number;
 type MissionSave = {
   code?: object; complete: boolean; attempts: number; hints: number; inspected: Part[]; started: number;
   best?: number; elapsed?: number; bonus?: boolean; improved?: boolean; experimentIndex?: number; observations?: { prediction?: string; answer?: string; result?: string }[];
-  questionAnswers?: Record<number, number>; questionOrder?: number[][]; runNote?: string;
+  guideStep?: number; quizStep?: number; quizPassed?: number[]; questionAnswers?: Record<number, number>; questionOrder?: number[][]; runNote?: string;
 };
 type Save = {
   current: number; missions: MissionSave[]; student?: string; robot?: string;
@@ -95,8 +102,14 @@ function read<T>(key: string, fallback: T): T {
 }
 const fresh = (): MissionSave => ({ complete: false, attempts: 0, hints: 0, inspected: [], started: 0 });
 const defaultSave = (): Save => ({ current: 0, missions: missions.map(fresh) });
-const loaded = read<Save>(key, defaultSave());
-let data = loaded.missions?.length === missions.length && missions[loaded.current] ? loaded : defaultSave();
+function loadLesson(number: 5 | 6) {
+  const legacy = number === 5 ? read(legacyKey, defaultSave()) : defaultSave();
+  const loaded = read(lessonKey(number), legacy);
+  return loaded.missions?.length === missions.length && missions[loaded.current] ? loaded : defaultSave();
+}
+const saves = { 5: loadLesson(5), 6: loadLesson(6) };
+lesson = read<number>('robot-academy-active-lesson', 5) === 6 ? 6 : 5;
+let data = saves[lesson];
 const settingsKey = 'robot-academy-settings';
 let settings = read<Settings>(settingsKey, { minutes: 60, sound: false });
 let current = data.current;
@@ -108,7 +121,10 @@ const completeCount = () => session().missions.filter(level => level.complete).l
 const unlocked = (index: number) => teaching || index === 0 || data.missions[index - 1]?.complete || data.missions[index]?.complete;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 function persist() {
-  try { localStorage.setItem(key, JSON.stringify(data)); }
+  try {
+    localStorage.setItem(lessonKey(lesson), JSON.stringify(data));
+    localStorage.setItem('robot-academy-active-lesson', JSON.stringify(lesson));
+  }
   catch { saved = false; }
 }
 
@@ -133,7 +149,8 @@ function loadCode() {
   workspace.getToolbox()?.clearSelection();
   Blockly.svgResize(workspace);
   const start = workspace.getTopBlocks(false).find(block => block.type === 'lab_start');
-  if (start) workspace.centerOnBlock(start.id, true);
+  if (lesson === 6 && workspace.getTopBlocks(false).length > 1) workspace.zoomToFit();
+  else if (start) workspace.centerOnBlock(start.id, true);
   else workspace.scrollCenter();
   loading = false;
 }
@@ -147,6 +164,8 @@ new ResizeObserver(() => Blockly.svgResize(workspace)).observe(get('workspace'))
 window.addEventListener('pagehide', saveCode);
 
 const sim = new Simulator();
+let controller: ReturnType<typeof compileMyBlocks> | undefined;
+let eventSequence: ('start' | 'left' | 'right')[] = [];
 const heroPose = new Simulator();
 let selectedPart: Part | undefined;
 let arena: ReturnType<typeof createArena> | undefined;
@@ -181,11 +200,12 @@ function report(message: string, tone = '') {
 }
 
 function mapMarkup(active: boolean) {
-  return missions.map((m, i) => {
+  return activities().map((m, i) => {
     const earned = session().missions[i].complete;
     const locked = active && !unlocked(i);
     const attributes = `class="map-node ${earned ? 'earned' : ''}" data-mission="${i}"`;
-    const contents = `<span class="map-icon" aria-hidden="true">${earned ? '✓' : levelIcons[i]}</span><span><small>LEVEL ${i + 1} · ${m.minutes} MIN</small><strong>${m.title}</strong></span>`;
+    const state = earned ? '✓' : locked ? '○' : '';
+    const contents = `<span class="map-icon" aria-label="${earned ? 'Complete' : locked ? 'Locked' : 'Incomplete'}">${state || '○'}</span><strong>${m.title}</strong>`;
     return active ? `<button type="button" ${attributes} ${locked ? 'disabled' : ''} ${i === current ? 'aria-current="step"' : ''}>${contents}</button>` :
       `<div ${attributes}>${contents}</div>`;
   }).join('');
@@ -198,7 +218,7 @@ function navigation() {
 }
 function welcome() {
   if (inLab) saveCode();
-  sim.reset(); clearTrails();
+  controller = undefined; sim.reset(); clearTrails();
   inLab = false;
   teaching = false;
   get('lab').hidden = true;
@@ -206,26 +226,39 @@ function welcome() {
   get('welcome').hidden = false;
   data.screen = 'welcome';
   persist();
-  get('durationBanner').textContent = `${settings.minutes}-minute challenge · 6 levels`;
-  input('studentName').value = data.student ?? '';
-  input('robotName').value = data.robot ?? '';
+
+  get('lessonSelect').innerHTML = ([5, 6] as const).map(number => `<button type="button" data-lesson="${number}" aria-pressed="${lesson === number}"><strong>Lesson ${number} — ${lessonTitles[number]}</strong><span>${saves[number].missions.filter(item => item.complete).length}/6 complete</span></button>`).join('');
+  get('lessonSelect').querySelectorAll<HTMLButtonElement>('button').forEach(item => item.onclick = () => {
+    const student = input('studentName').value, robot = input('robotName').value;
+    lesson = item.dataset.lesson === '6' ? 6 : 5;
+    data = saves[lesson];
+    welcome();
+    input('studentName').value ||= student;
+    input('robotName').value ||= robot;
+  });
+  input('studentName').value = data.student ?? saves[lesson === 5 ? 6 : 5].student ?? '';
+  input('robotName').value = data.robot ?? saves[lesson === 5 ? 6 : 5].robot ?? '';
   input('timedChoice').checked = data.timed ?? true;
   input('timedChoice').disabled = !!data.clock;
-  button('start').textContent = data.student ? 'Resume Adventure' : 'Start Adventure';
+  button('start').textContent = data.student ? 'Resume lesson' : 'Start lesson';
   get('welcomeMap').innerHTML = mapMarkup(false);
   window.scrollTo(0, 0);
 }
 function openLab(index: number) {
   current = index;
   selectedPart = undefined;
-  sim.reset(); clearTrails();
+  controller = undefined; sim.reset(); clearTrails();
   get('returnNote').hidden = true;
   inLab = true;
   get('welcome').hidden = true;
   get('lab').hidden = false;
   get('gameStats').hidden = false;
   get('identity').textContent = teaching ? 'Teacher preview' : `${data.student} · ${data.robot}`;
-  button('home').title = 'Return to welcome';
+  button('home').title = 'Save and return to lesson selection';
+  workspace.updateToolbox(lessonToolbox(lesson === 6));
+  arena?.setCourse(lesson === 6);
+  get('hubButtons').hidden = lesson !== 6;
+  updateHubButtons();
   if (!teaching) {
     data.current = current;
     data.screen = 'lab';
@@ -300,7 +333,7 @@ function showSummary(title?: string) {
   get('summaryTitle').textContent = title ?? (snapshot ? 'Timed challenge results' : count === 6 ? 'Robotics Champion' : 'Your progress');
   get('summaryBody').innerHTML = `<p class="summary-score"><strong>${percentage}%</strong> complete · ${count}/6 badges · ${totalXP(levels)} XP</p>
     ${snapshot ? '<p>These results are saved for your timed session. Practice can still earn badges on your adventure map.</p>' : ''}
-    <ul class="result-list">${levels.map((level, i) => `<li><span>${level.complete ? '✓' : '○'} ${missions[i].title}</span><span>${level.elapsed == null ? (level.complete ? 'Cleared' : 'In progress') : formatTime(level.elapsed)}${bests[i] == null ? '' : ' · Best ' + formatTime(bests[i]!)}</span></li>`).join('')}</ul>`;
+    <ul class="result-list">${levels.map((level, i) => `<li><span>${level.complete ? '✓' : '○'} ${activities()[i].title}</span><span>${level.elapsed == null ? (level.complete ? 'Cleared' : 'In progress') : formatTime(level.elapsed)}${bests[i] == null ? '' : ' · Best ' + formatTime(bests[i]!)}</span></li>`).join('')}</ul>`;
   button('summaryClose').textContent = data.clock && !data.clock.finishedAt ? 'Back to challenge' : 'Continue practice';
   if (!dialog('summary').open) dialog('summary').showModal();
 }
@@ -341,15 +374,13 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-async function openTeacher() {
-  const info = await import('./teacher');
+function openTeacher() {
   input('teacherDuration').value = String(settings.minutes);
   input('teacherSound').checked = settings.sound;
-  get('teacherLevels').innerHTML = missions.map((m, i) => `<button type="button" data-preview="${i}">${i + 1}. ${m.title}</button>`).join('');
-  get('teacherCriteria').innerHTML = `<ol>${info.criteria.map(item => '<li>' + item + '</li>').join('')}</ol>`;
+  get('teacherLevels').innerHTML = activities().map((m, i) => `<button type="button" data-preview="${i}">${m.title}</button>`).join('');
   get('referenceContent').hidden = true;
   get('referenceContent').textContent = '';
-  button('teacherReference').textContent = 'View teacher reference';
+  button('teacherReference').textContent = 'View quiz answer key';
   get('teacherLevels').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => {
     dialog('teacherPanel').close();
     teaching = true;
@@ -359,28 +390,38 @@ async function openTeacher() {
   button('teacherReference').onclick = () => {
     const panel = get('referenceContent');
     panel.hidden = !panel.hidden;
-    panel.innerHTML = panel.hidden ? '' : info.reference.map(([title, body]) => `<h3>${title}</h3><p>${body}</p>`).join('');
-    button('teacherReference').textContent = panel.hidden ? 'View teacher reference' : 'Hide teacher reference';
+    panel.innerHTML = panel.hidden ? '' : quizKey(championship());
   };
   dialog('teacherPanel').showModal();
 }
-button('teacher').onclick = () => { void openTeacher(); };
+button('teacher').onclick = openTeacher;
 button('teacherClose').onclick = () => dialog('teacherPanel').close();
 button('saveSettings').onclick = () => {
   const field = input('teacherDuration');
   if (!field.reportValidity()) return;
   settings = { minutes: field.valueAsNumber, sound: input('teacherSound').checked };
   try { localStorage.setItem(settingsKey, JSON.stringify(settings)); } catch { saved = false; }
-  get('durationBanner').textContent = `${settings.minutes}-minute challenge · 6 levels`;
+
   dialog('teacherPanel').close();
 };
-button('resetSession').onclick = () => {
-  if (!confirm('Clear this browser’s student names, programs, timer, and badges?')) return;
-  data = defaultSave();
+function newSession() {
+  if (!confirm('End this student session and clear the saved programs, progress, quizzes, and timers for both lessons?')) return;
+  inLab = false;
+  clearTimeout(saveTimer);
+  try {
+    localStorage.setItem(lessonKey(5), JSON.stringify(defaultSave()));
+    localStorage.setItem(lessonKey(6), JSON.stringify(defaultSave()));
+    localStorage.removeItem(legacyKey);
+  } catch { saved = false; }
+  saves[5] = defaultSave();
+  saves[6] = defaultSave();
+  data = saves[lesson];
   current = 0;
   dialog('teacherPanel').close();
   welcome();
-};
+}
+button('resetSession').onclick = newSession;
+button('newSession').onclick = newSession;
 
 function updateParts() {
   const panel = document.getElementById('partPanel');
@@ -390,7 +431,7 @@ function updateParts() {
 }
 function partInfo(part: Part) {
   selectedPart = part;
-  if (current === 0) {
+  if (lesson === 5 && current === 0) {
     if (!record().inspected.includes(part)) record().inspected.push(part);
     if (!teaching) persist();
     updateParts();
@@ -400,105 +441,177 @@ function partInfo(part: Part) {
 
 const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const experimentIndex = () => record().experimentIndex ?? 0;
-const activeExperiment = () => experiments[current]?.[experimentIndex()];
+const legacyExperiment = () => lesson === 5 ? experiments[current]?.[experimentIndex()] : undefined;
+const activityExperiments = () => lesson === 5 ? experiments[current] ?? [] : myExperiments[current] ?? [];
+const activeExperiment = () => activityExperiments()[experimentIndex()];
+const activityQuiz = () => current === 5 ? championship() : lesson === 5 ? comprehension[current] ?? [] : [];
 function currentObservation() {
   return ((record().observations ??= [])[experimentIndex()] ??= {});
 }
+function quizKey(questions: LessonQuestion[]) {
+  return '<ol>' + questions.map(q => `<li>${escape(q.question)} <strong>${escape(q.options[0])}</strong><p>${escape(q.explanation)}</p></li>`).join('') + '</ol>';
+}
 function renderMission() {
-  const m = missions[current];
-  get('missionMeta').textContent = `LEVEL ${current + 1} · ${m.minutes} MIN`;
-  get('missionTitle').textContent = m.title;
-  get('objective').textContent = m.objective;
+  get('missionMeta').textContent = 'Lesson ' + lesson + ' · ' + lessonTitles[lesson];
+  get('missionTitle').textContent = activities()[current].title;
   const activity = activeExperiment();
   if (activity) renderExperiment(activity);
-  else renderQuiz(current === 5 ? championQuiz : comprehension[current] ?? []);
+  else renderQuiz(activityQuiz());
   navigation();
 }
-function renderExperiment(activity: Experiment) {
+type Instruction = { text: string; example?: string; category?: string; parts?: boolean };
+function blockExample(step: Instruction) {
+  if (!step.example) return '';
+  return `<div class="block-example ${step.category?.toLowerCase().replace(' ', '-')}">${escape(step.example).replace(/\[([^\]]+)\]/g, '<b>$1</b>')}</div>`;
+}
+function comparisonSteps(comparison: { operator: string; threshold: number }): Instruction[] {
+  return [
+    { text: `Drag ${comparison.operator} from Operators into wait until.`, category: 'Operators', example: `[0] ${comparison.operator} [0]` },
+    { text: 'Drag yaw angle from Sensors into the left side of the comparison.', category: 'Sensors', example: 'yaw angle' },
+    { text: `Set the number on the right to ${comparison.threshold}.`, category: 'Operators', example: `yaw angle ${comparison.operator} [${comparison.threshold}]` },
+  ];
+}
+function myInstructions(activity: MyExperiment) {
+  const steps: Instruction[] = [];
+  if (activity.title === 'Use a clearer name') steps.push({ text: 'Click the name on Define Forward and change it to ShortForward.', category: 'My Blocks', example: 'Define [ShortForward]' });
+  function walk(first: Block, parent?: string) {
+    for (let block: Block | undefined = first; block; block = block.next?.block) {
+      const example = blockLabel(block);
+      const type = block.type;
+      let category = 'Movement';
+      let text = '';
+      if (type === 'procedures_defnoreturn') {
+        category = 'My Blocks';
+        text = `Choose Make a My Block and name it ${block.fields?.NAME} if it is missing.`;
+      } else if (!parent) {
+        category = 'Events';
+        text = `Use ${example} as a separate stack.`;
+      } else {
+        if (type === 'procedures_callnoreturn') category = 'My Blocks';
+        if (type === 'lab_until' || type === 'lab_repeat') category = 'Control';
+        if (type === 'lab_zero') category = 'Sensors';
+        text = `Use the pictured ${category} block ${parent.startsWith('repeat') || parent.startsWith('Define') ? 'inside' : 'below'} ${parent.replaceAll('[', '').replaceAll(']', '')}.`;
+      }
+      steps.push({ text, example, category });
+      const test = block.inputs?.COND?.block;
+      if (test) steps.push(...comparisonSteps({ operator: '=', threshold: Number(test.inputs?.RIGHT.shadow?.fields?.VALUE) }));
+      const body = block.inputs?.STACK?.block ?? block.inputs?.DO?.block;
+      if (body) walk(body, example);
+      parent = example;
+    }
+  }
+  activity.code.blocks.blocks.forEach(stack => walk(stack));
+  return steps;
+}
+function renderExperiment(activity: Experiment | MyExperiment) {
   const index = experimentIndex();
-  const last = record().observations?.[index - 1]?.result;
-  get('missionText').innerHTML = `<div class="guided-intro"><p class="eyebrow">EXPERIMENT ${index + 1} OF ${experiments[current].length}</p>
-      <h2>${activity.title}</h2></div>
-    ${current === 0 && !index ? '<p><strong>Explore first.</strong> Select all four parts to see what each one does.</p><div id="partPanel"></div>' : ''}
-    <label for="experimentPrediction"><strong>1. Predict</strong><br>${activity.predict}</label>
-    <textarea id="experimentPrediction" rows="2" maxlength="400" placeholder="I think…"></textarea>
-    <p class="try-next"><strong>2. Change your blocks.</strong> ${escape(activity.edit)}</p>
-    <details class="experiment-blocks" ${index ? '' : 'open'}><summary>Exact block instructions</summary>
-      <p>Drag each block from the named category. Click a number or menu to edit it.</p>
-      <ol class="guide-steps">${activity.steps.map((step, i) => {
-        const compare = step.comparison ? escape(step.comparison.operator) : '';
-        const threshold = step.comparison?.threshold;
-        const nested = compare ? `<span class="block-example operators"><span class="block-example sensors">yaw angle</span> ${compare} <b>${threshold}</b></span>` : '';
-        return `<li><p>Open <strong>${step.category}</strong>. Drag this block and snap it below <strong>${i === 0 ? 'When program starts' : 'the block you just added'}</strong>.</p>
-          <div class="block-example ${step.category.toLowerCase()}">${escape(step.example).replace(/\[([^\]]+)\]/g, '<b>$1</b>')}${nested}</div>
-          <p>${step.instruction}</p>
-          ${nested ? `<ol class="nest-steps"><li>Open <strong>Operators</strong>. Drag the <strong>${compare}</strong> block into the empty slot on <strong>wait until</strong>.</li><li>Open <strong>Sensors</strong>. Drag <strong>yaw angle</strong> into the left box on the green block.</li><li>Click the number on the right and enter <strong>${threshold}</strong>.</li></ol>` : ''}
-        </li>`;
-      }).join('')}</ol></details>
-    <button id="showExample" type="button">Show me how</button>
-    <p><strong>3. Press Run Robot.</strong></p>
-    <p><strong>4. Observe.</strong> ${activity.observe}</p>
-    ${last ? `<details><summary>Last experiment’s result</summary><p>${escape(last)}</p></details>` : ''}
-    <form id="reflectionForm"><label for="reflection"><strong>5. Answer</strong><br>${activity.question}</label>
-      <textarea id="reflection" rows="2" maxlength="400" required placeholder="I noticed…"></textarea>
-      <button id="finishExperiment" type="submit" class="primary">${index + 1 < experiments[current].length ? 'Next experiment' : comprehension[current] ? 'Go to questions' : 'Finish level'}</button>
-      <p id="experimentReady" aria-live="polite"></p>
-    </form>`;
-  const prediction = get<HTMLTextAreaElement>('experimentPrediction');
-  const reflection = get<HTMLTextAreaElement>('reflection');
+  const level = record();
   const result = currentObservation();
-  prediction.value = result.prediction ?? '';
-  reflection.value = result.answer ?? '';
-  prediction.oninput = () => {
-    result.prediction = prediction.value;
+  const legacy = 'steps' in activity;
+  const build: Instruction[] = legacy ? activity.steps.flatMap((step, i) => {
+    const attach = i ? 'the previous block' : 'When program starts';
+    return [
+      ...(i === 0 || activity.steps[i - 1].category !== step.category ?
+        [{ text: `Open the ${step.category} category.`, category: step.category }] : []),
+      { text: `Snap the pictured block below ${attach}.`, example: step.example, category: step.category },
+      ...(step.comparison ? comparisonSteps(step.comparison) :
+        step.example.includes('[') ? [{ text: step.instruction.split(/(?<=\.) (?=[A-Z])/)[0], example: step.example, category: step.category }] : []),
+    ];
+  }) : myInstructions(activity);
+  if (legacy && index) build.unshift({ text: activity.edit });
+  const steps: (Instruction & { stage: string })[] = [
+    { stage: 'Predict', text: activity.predict },
+    ...(legacy && current === 0 && index === 0 ? [{ stage: 'Build', text: 'Explore the four robot parts.', parts: true }] : []),
+    ...build.map(step => ({ ...step, stage: 'Build' })),
+    ...(!legacy && activity.debug ? activity.debug.map(text => ({ stage: 'Debug', text })) : []),
+    { stage: 'Run', text: 'Press Run Robot.' },
+    ...(!legacy ? activity.entry.slice(1).map(side => ({stage: 'Run', text: `When the robot is ready, press the ${side} hub button.`})) : []),
+    { stage: 'Observe', text: activity.observe },
+    { stage: 'Answer', text: activity.question },
+  ];
+  const stepNumber = Math.min(level.guideStep ?? 0, steps.length - 1);
+  const step = steps[stepNumber];
+  const field = step.stage === 'Predict' ? 'prediction' : step.stage === 'Answer' ? 'answer' : undefined;
+  const answer = !legacy ? activity : lessonFiveAnswers[current][index];
+  get('missionText').innerHTML = `
+    ${teaching ? `<label for="experimentPreview">Experiment answer key</label><select id="experimentPreview">${activityExperiments().map((item, i) =>
+      `<option value="${i}" ${i === index ? 'selected' : ''}>${escape(item.title)}</option>`).join('')}</select>` :
+      `<p class="eyebrow">Experiment ${index + 1} of ${activityExperiments().length}</p>`}
+    <h2>${escape(activity.title)}</h2>
+    <div class="step-card">
+      <p class="step-progress" tabindex="-1">Step ${stepNumber + 1} of ${steps.length} · ${step.stage}</p>
+      <p>${escape(step.text)}</p>${blockExample(step)}
+      ${step.parts ? '<div id="partPanel"></div>' : ''}
+      ${field ? `<textarea id="studentResponse" aria-label="${step.stage}" rows="2" maxlength="400"></textarea>` : ''}
+      ${step.stage === 'Observe' && result.result ? `<p>${escape(result.result)}</p>` : ''}
+      <div class="step-actions"><button id="previousStep" type="button" ${stepNumber === 0 ? 'disabled' : ''}>Previous</button>
+      <button id="nextStep" class="primary" type="button">${stepNumber < steps.length - 1 ? 'Next' : index + 1 < activityExperiments().length ? 'Next experiment' : 'Finish experiments'}</button></div>
+    </div>
+    <button id="showExample" type="button">${teaching ? 'Load answer program' : 'Show me how'}</button>
+    <p id="experimentReady" aria-live="polite"></p>
+    ${teaching ? `<details open><summary>Teacher answer</summary><dl><dt>Prediction and observation</dt><dd>${escape(answer.expected)}</dd><dt>Concept</dt><dd>${escape(answer.concept)}</dd><dt>Common mistake</dt><dd>${escape(answer.mistake)}</dd></dl></details>
+      ${activityQuiz().length ? `<details><summary>Activity quiz answers</summary>${quizKey(activityQuiz())}</details>` : ''}` : ''}`;
+  function go(n: number) {
+    level.guideStep = n;
     if (!teaching) persist();
-    updateExperimentReady();
-  };
-  reflection.oninput = () => {
-    result.answer = reflection.value;
+    renderExperiment(activity);
+    get('missionText').querySelector<HTMLElement>('.step-progress')?.focus();
+  }
+  button('previousStep').onclick = () => go(stepNumber - 1);
+  button('nextStep').onclick = () => {
+    if (stepNumber < steps.length - 1) { go(stepNumber + 1); return; }
+    level.experimentIndex = index + 1;
+    level.guideStep = 0;
+    delete level.runNote;
     if (!teaching) persist();
-    updateExperimentReady();
-  };
-  get<HTMLFormElement>('reflectionForm').onsubmit = event => {
-    event.preventDefault();
-    if (button('finishExperiment').disabled) return;
-    record().experimentIndex = index + 1;
-    delete record().runNote;
-    if (!teaching) persist();
-    if (activeExperiment() || comprehension[current]) {
+    if (activeExperiment() || activityQuiz().length) {
       renderMission();
-      get('missionMeta').closest('.mission')!.scrollTop = 0;
-      report(activeExperiment() ? 'Make a new prediction, then change your blocks and run again.' : 'Answer the questions about the experiments you just ran.');
+      report(activeExperiment() ? 'Make your next prediction.' : 'Answer the questions about your experiments.');
     } else finishLesson();
   };
   button('showExample').onclick = () => loadExample(activity);
+  if (field) {
+    const response = get<HTMLTextAreaElement>('studentResponse');
+    response.value = result[field] ?? '';
+    response.oninput = () => { result[field] = response.value; if (!teaching) persist(); updateExperimentReady(); };
+  }
+  if (teaching) get<HTMLSelectElement>('experimentPreview').onchange = event => {
+    level.experimentIndex = Number((event.target as HTMLSelectElement).value);
+    level.guideStep = 0;
+    renderMission();
+  };
   updateParts();
   updateExperimentReady();
 }
-function loadExample(activity?: Experiment) {
+function loadExample(activity?: Experiment | MyExperiment) {
   const hasWork = workspace.getAllBlocks(false).some(block => block.type !== 'lab_start');
   if (hasWork && !confirm('Replace the blocks in this workspace with the example?')) return;
-  if (current === 2 && sim.travel > 0.14) {
+  if (lesson === 5 && current === 2 && sim.travel > 0.14) {
     arena?.clear(true);
     get('previousTrail').hidden = false;
-  } else if (current !== 2) clearTrails();
+  } else clearTrails();
+  controller = undefined;
   sim.reset();
-  record().code = exampleProgram(Math.min(current, 4), activity?.steps);
+  updateHubButtons();
+  record().code = activity && 'code' in activity ? activity.code :
+    lesson === 6 ? myBlocksReference : exampleProgram(Math.min(current, 4), activity && 'steps' in activity ? activity.steps : undefined);
   loadCode();
   if (!teaching) persist();
-  report('Example loaded. Make your prediction, then press Run Robot.');
+  report('Example loaded. Press Run Robot to test it.');
   updateExperimentReady();
 }
 function updateExperimentReady() {
-  const submit = document.getElementById('finishExperiment') as HTMLButtonElement | null;
-  if (!submit) return;
+  const note = document.getElementById('experimentReady');
+  if (!note || teaching) return;
+  const next = button('nextStep');
+  if (!next || next.textContent === 'Next') return;
   const result = currentObservation();
-  const busy = sim.state === 'running' || sim.state === 'paused';
-  const missingParts = current === 0 && experimentIndex() === 0 && record().inspected.length < 4;
-  submit.disabled = busy || missingParts || !result.prediction?.trim() || !result.result || !result.answer?.trim();
-  get('experimentReady').textContent = missingParts ? 'Explore all four robot parts.' : busy ? 'Watch your robot finish the run.' :
-    !result.prediction?.trim() ? 'Write your prediction before running.' : !result.result ? activeExperiment()!.goal :
-    !result.answer?.trim() ? 'Answer the question using what you saw.' : 'Ready to continue.';
+  const missingParts = lesson === 5 && current === 0 && experimentIndex() === 0 && record().inspected.length < 4;
+  next.disabled = missingParts || !result.prediction?.trim() || !result.result || !result.answer?.trim();
+  note.textContent = missingParts ? 'Explore all four robot parts in Build.' :
+    !result.prediction?.trim() ? 'Write your prediction on the Predict step.' :
+    !result.result ? legacyExperiment()?.goal ?? 'Run the program and try the buttons listed in Run.' :
+    !result.answer?.trim() ? 'Write your answer using what you saw.' : '';
 }
 function finishLesson() {
   if (record().complete && current < 5) switchMission(current + 1);
@@ -506,14 +619,15 @@ function finishLesson() {
   else completeLevel();
 }
 function renderQuiz(questions: LessonQuestion[]) {
+  const level = record();
   if (!questions.length) {
-    get('missionText').innerHTML = '<p>All experiments are recorded.</p><button id="finishLesson" class="primary" type="button">Finish level</button>';
+    get('missionText').innerHTML = '<p>All experiments are recorded.</p><button id="finishLesson" class="primary" type="button">Finish activity</button>';
     button('finishLesson').onclick = finishLesson;
     return;
   }
-  const level = record();
   if (level.questionOrder?.length !== questions.length) {
     level.questionAnswers = {};
+    level.quizPassed = [];
     level.questionOrder = questions.map(({ options }) => {
       const order = options.map((_, i) => i);
       for (let i = order.length - 1; i > 0; i--) {
@@ -524,40 +638,45 @@ function renderQuiz(questions: LessonQuestion[]) {
     });
     if (!teaching) persist();
   }
+  const i = Math.min(level.quizStep ?? 0, questions.length - 1);
+  const q = questions[i];
   const answers = level.questionAnswers ??= {};
-  get('missionText').innerHTML = `<h2>${current === 5 ? '15 championship questions' : 'Check your understanding'}</h2>
-    <p>Pick one answer per question, then check your answers. You can try again.</p>
-    ${current === 5 ? '<button id="showExample" type="button">Show me how</button><p>Load the full Level 5 program to test a prediction.</p>' : ''}
-    <form id="quizForm">${questions.map((q, i) => `<fieldset><legend>${i + 1}. ${q.question}</legend>
-      ${level.questionOrder![i].map(j => `<label><input type="radio" name="q${i}" value="${j}" ${answers[i] === j ? 'checked' : ''} required> ${escape(q.options[j])}</label>`).join('')}
-      <p id="quizNote${i}" class="quiz-note" aria-live="polite"></p></fieldset>`).join('')}
-      <button type="submit" class="primary">Check answers</button><p id="quizResult" role="status"></p></form>`;
+  const passed = level.quizPassed ??= level.complete ? questions.map((_, j) => j) : [];
+  get('missionText').innerHTML = `
+    <p class="step-progress">Question ${i + 1} of ${questions.length}</p>
+    <form id="quizForm"><fieldset><legend>${escape(q.question)}</legend>
+    ${level.questionOrder![i].map(j => `<label><input type="radio" name="answer" value="${j}" ${answers[i] === j ? 'checked' : ''} required> ${escape(q.options[j])}</label>`).join('')}
+    </fieldset><p id="quizResult" class="quiz-note" role="status">${passed.includes(i) ? '✓ Correct' : ''}</p>
+    <button type="submit" class="primary">Check answer</button></form>
+    <div class="step-actions"><button id="quizBack" type="button" ${i === 0 ? 'disabled' : ''}>Previous</button>
+    <button id="quizNext" type="button">${i < questions.length - 1 ? 'Next' : 'Finish quiz'}</button></div>
+    ${current === 5 ? '<button id="showExample" type="button">Show reference program</button>' : ''}
+    ${teaching ? `<details open><summary>Quiz answer key</summary>${quizKey(questions)}</details>` : ''}`;
   if (current === 5) button('showExample').onclick = () => loadExample();
   const form = get<HTMLFormElement>('quizForm');
   form.onchange = event => {
-    const field = event.target as HTMLInputElement;
-    const i = Number(field.name.slice(1));
-    answers[i] = Number(field.value);
-    get('quizNote' + i).textContent = '';
+    answers[i] = Number((event.target as HTMLInputElement).value);
+    if (passed.includes(i) && answers[i] !== 0) passed.splice(passed.indexOf(i), 1);
+    get('quizResult').textContent = passed.includes(i) ? '✓ Correct' : '';
     if (!teaching) persist();
   };
   form.onsubmit = event => {
     event.preventDefault();
-    updateClock();
     level.attempts++;
-    const correct = questions.filter((q, i) => {
-      const passed = answers[i] === 0;
-      const note = get('quizNote' + i);
-      note.dataset.correct = String(passed);
-      note.textContent = passed ? '✓ Correct' : 'Try again. ' + q.explanation;
-      return passed;
-    }).length;
+    const correct = answers[i] === 0;
+    if (correct && !passed.includes(i)) passed.push(i);
+    get('quizResult').dataset.correct = String(correct);
+    get('quizResult').textContent = correct ? '✓ Correct. ' + q.explanation : 'Try again. ' + q.explanation;
     if (!teaching) persist();
-    if (correct === questions.length) finishLesson();
+  };
+  function go(n: number) { level.quizStep = n; if (!teaching) persist(); renderQuiz(questions); }
+  button('quizBack').onclick = () => go(i - 1);
+  button('quizNext').onclick = () => {
+    if (i < questions.length - 1) go(i + 1);
+    else if (passed.length === questions.length || teaching) finishLesson();
     else {
-      const message = `${correct} of ${questions.length} correct. Read the explanations and try again.`;
-      get('quizResult').textContent = message;
-      report(message, 'retry');
+      go(questions.findIndex((_, j) => !passed.includes(j)));
+      get('quizResult').textContent = 'Check an answer for each question to finish.';
     }
   };
 }
@@ -593,7 +712,7 @@ function completeLevel() {
   get('earnedIcon').textContent = levelIcons[current];
   get('earnedBadge').textContent = badges[current];
   get('earnedDetails').textContent = `+100 XP · Level time ${formatTime(level.elapsed)} · Personal best ${formatTime(level.best)}`;
-  button('celebrateNext').textContent = current === 5 ? 'View results' : 'Next Level';
+  button('celebrateNext').textContent = current === 5 ? 'View results' : 'Next activity';
   dialog('celebration').querySelector('.confetti')!.innerHTML = Array.from({ length: 24 }, (_, i) =>
     `<i style="--x:${(i * 43) % 100}%;--d:${(i % 7) * 70}ms;--c:${['#ffb740','#42cbba','#a485ff','#ff68a2'][i % 4]}"></i>`).join('');
   dialog('celebration').showModal();
@@ -605,8 +724,53 @@ button('celebrateNext').onclick = () => {
   if (current < 5) switchMission(current + 1);
   else showSummary();
 };
-let madePredictionBeforeRun = false;
+const referenceRuns = new WeakMap<MyExperiment, ReturnType<Simulator['sample']>>();
+function matchesReference(activity: MyExperiment) {
+  if (eventSequence.length !== activity.entry.length) return false;
+  if (activity.title === 'Define Forward' && !controller?.unused.some(name => name.toLowerCase() === 'forward')) return false;
+  if ((activity.title === 'Set up the base' || activity.code === myBlocksReference) &&
+      !['ports', 'speed', 'calibrate'].every(kind => sim.history.some(({ command }) => command.kind === kind))) return false;
+  let expected = referenceRuns.get(activity);
+  if (!expected) {
+    const source = new Blockly.Workspace();
+    try {
+      Blockly.serialization.workspaces.load(activity.code, source);
+      const program = compileMyBlocks(source);
+      const reference = new Simulator();
+      for (const entry of activity.entry) {
+        reference.executeStream(program.run(entry));
+        for (let tick = 0; tick < 15000 && reference.state === 'running'; tick++) reference.tick(1 / 60);
+        if (reference.state !== 'done') return false;
+      }
+      expected = reference.sample();
+      referenceRuns.set(activity, expected);
+    } finally {
+      source.dispose();
+    }
+  }
+  const actual = sim.sample();
+  return Math.hypot(actual.x - expected.x, actual.z - expected.z) < 1.5 &&
+    Math.abs(actual.travel - expected.travel) < 1.5 && Math.abs(actual.angle - expected.angle) < 0.08 &&
+    Math.abs(actual.left - expected.left) < 0.15 && Math.abs(actual.right - expected.right) < 0.15 &&
+    sim.ports === 'A+E' && sim.speed === 50 && Math.abs(sim.circumference - 27.63) < 0.05;
+}
+function updateHubButtons() {
+  const ready = !!controller && sim.state === 'done';
+  button('hubLeft').disabled = !ready || !controller?.hasButton('left');
+  button('hubRight').disabled = !ready || !controller?.hasButton('right');
+}
+function runButton(side: 'left' | 'right') {
+  if (!controller?.hasButton(side) || sim.state !== 'done') return;
+  eventSequence.push(side);
+  sim.executeStream(controller.run(side));
+  priorState = 'running';
+  updateHubButtons();
+  report('Running the ' + side + ' button stack.', 'running');
+}
+button('hubLeft').onclick = () => runButton('left');
+button('hubRight').onclick = () => runButton('right');
 function finishRun(stopped = false) {
+  updateHubButtons();
   updateClock();
   const moved = Math.abs(sim.wheelLeft) + Math.abs(sim.wheelRight) > 0.0001;
   const observation = moved
@@ -621,13 +785,19 @@ function finishRun(stopped = false) {
       `Final position: ${Math.abs(offset).toFixed(1)} cm ${offset >= 0 ? 'ahead of' : 'behind'} the start line.`;
   }
   const activity = activeExperiment();
+  const unused = controller?.unused;
+  const hubNote = sim.state === 'done' && controller && (controller.hasButton('left') || controller.hasButton('right')) ? 'Connected hub buttons are ready.' : '';
   const message = [stopped ? 'You stopped the program.' : sim.message, observation + setupNote, positionNote,
+    unused?.length ? `Defined but never called: ${unused.join(', ')}. Add a call from a start or button stack.` : '', hubNote,
     'Simulated run time: ' + sim.time.toFixed(2) + ' s.'].filter(Boolean).join(' ');
   if (activity) {
     record().runNote = message;
     const result = currentObservation();
-    if (!stopped && madePredictionBeforeRun && activity.check(sim)) result.result = message;
-    const guidance = result.result ? '' : !madePredictionBeforeRun ? ' Write a prediction, then run again to record this experiment.' : ' Next, try this goal: ' + activity.goal;
+    const matches = 'check' in activity ? activity.check(sim) : sim.state === 'done' &&
+      activity.entry.every((entry, i) => eventSequence[i] === entry) && matchesReference(activity);
+    if (!stopped && matches) result.result = message;
+    const guidance = result.result ? '' : 'check' in activity ? ' Try this goal: ' + activity.goal :
+      ' Use the Build and Run steps to check the program.';
     if (!teaching) persist();
     updateExperimentReady();
     report(message + guidance, stopped ? 'stopped' : sim.state === 'error' && !result.result ? 'retry' : 'observed');
@@ -636,15 +806,21 @@ function finishRun(stopped = false) {
   report(message, stopped ? 'stopped' : sim.state === 'error' ? 'retry' : 'observed');
 }
 function startRun(step: boolean) {
-  if (current === 2 && arena && sim.travel > 0.14) get('previousTrail').hidden = false;
+  const keepPrevious = lesson === 5 && current === 2;
+  if (keepPrevious && arena && sim.travel > 0.14) get('previousTrail').hidden = false;
   sim.reset();
-  arena?.clear(current === 2);
+  controller = undefined;
+  eventSequence = ['start'];
+  updateHubButtons();
+  arena?.clear(keepPrevious);
   record().attempts++;
   saveCode();
   try {
-    sim.start(compile(workspace, { runUntilUnfinishedBlock: true }));
+    if (lesson === 6) {
+      controller = compileMyBlocks(workspace);
+      sim.executeStream(controller.run('start'));
+    } else sim.start(compile(workspace, { runUntilUnfinishedBlock: true }));
     priorState = 'running';
-    madePredictionBeforeRun = !!(activeExperiment() && currentObservation().prediction?.trim());
     if (step) sim.step();
     report('Watch the highlighted block and the arena.', 'running');
     updateExperimentReady();
@@ -664,11 +840,14 @@ button('pause').onclick = () => {
   if (sim.state === 'running') report('Watch the highlighted block.', 'running');
 };
 button('stop').onclick = () => {
+  controller = undefined;
   sim.stop();
   finishRun(true);
 };
 button('resetRobot').onclick = () => {
+  controller = undefined;
   sim.reset();
+  updateHubButtons();
   clearTrails();
   report('Robot returned to the start.');
   updateExperimentReady();
@@ -705,7 +884,7 @@ function frame(now: number) {
       get('simState').dataset.state = sim.state;
       button('pause').disabled = sim.state !== 'paused' && sim.state !== 'running';
       button('pause').textContent = sim.state === 'paused' ? 'Resume' : 'Pause';
-      button('stop').disabled = button('pause').disabled;
+      button('stop').disabled = button('pause').disabled && !(controller && sim.state === 'done');
       button('run').disabled = sim.state === 'running' || sim.state === 'paused';
       if (sim.state !== priorState && (sim.state === 'done' || sim.state === 'error')) finishRun();
       priorState = sim.state;

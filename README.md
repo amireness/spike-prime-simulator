@@ -1,47 +1,38 @@
-﻿# Robot Academy: Advanced Base Challenge
+﻿# Robot Academy · SPIKE Prime Simulator
 
-**Competition Ready · Lesson 5 · Assembling an Advanced Base**
+[Launch Robot Academy](https://amireness.github.io/spike-prime-simulator/)
 
-**[Launch Robot Academy →](https://amireness.github.io/spike-prime-simulator/)**
+Program the same simulated SPIKE Prime Advanced Driving Base in two classroom lessons. Students use Blockly and a 3D testing arena on the same screen. Each guide presents one step at a time, with a block example when needed. **Previous** and **Next** let students move through the guide freely. **Show me how** loads an editable example.
 
-A 60-minute classroom game for programming a simulated SPIKE Prime driving base. Students name their robot, start with the Level 1 guided Blockly experiment, and earn badges across six levels. Programs, progress, challenge timing, and personal bests are stored in each student's browser for the site's origin.
+## Lessons
 
-## Run locally
+- **Lesson 5 — Advanced Driving Base** covers the A + E drive motors, wheel calibration, forward and reverse movement, steering, and signed yaw. It includes exact 45°, 90°, and 135° turns, timed turns, the original complete driving program, debugging, and a championship quiz.
+- **Lesson 6 — My Blocks** is a roughly 60-minute lesson with 27 experiments across Movement Review (5 min), Create Your First My Block (10 min), Button Controller (10 min), Square Challenge (15 min), and Robot Navigator (12 min). A 15-question Championship Quiz takes about 8 min. Students build reusable actions and test them on a 50 cm square course with two markers 50 cm apart.
 
-Install Node.js 24 LTS, then run from this directory:
+The [LEGO Education Lesson 5 reference](https://education.lego.com/en-us/lessons/prime-competition-ready/assembling-an-advanced-driving-base/) and [Lesson 6 reference](https://education.lego.com/en-us/lessons/prime-competition-ready/my-code-our-program/) use the Advanced Driving Base. The Lesson 6 example in Robot Academy includes three editable stacks. **When program starts** configures A + E at 50% and sets 27.63 cm per rotation. **Define Forward** stores a two-rotation move. **When right hub button pressed** calls **Forward**. Run Robot initializes the program. Press **Right hub button** to move 55.26 cm.
+
+## Classroom controls
+
+- **Home** saves your program and opens lesson selection. Each lesson stores its own programs, progress, quiz answers, and challenge timer in this browser. Existing Lesson 5 saves migrate when the app opens. **New student session** asks for confirmation before clearing student data for both lessons.
+- **Student Challenge Mode** starts the selected lesson’s timer when the lab opens. The countdown continues across Home navigation, tab changes, and reloads. Students can practice after time expires.
+- **Teacher mode** opens a separate workspace and can preview any activity or experiment. Each answer key includes an executable Blockly program, expected behavior, explanations, common mistakes, and quiz answers.
+- In Lesson 6, open **My Blocks → Make a My Block**, name the definition, and place actions inside it. Drag the matching call from My Blocks into a start stack, a button stack, a repeat loop, or another definition. Click the definition’s name to rename it. Right-click the definition to delete it. Press **Run Robot** after editing to register the updated button stacks.
+- **Pause** holds the current action. **Step** runs one action. **Stop** ends the run and disarms button events. **Reset Robot** returns the robot to the starting position and clears the trail.
+
+The arena uses an ideal differential-drive model. Positive steering turns right, negative steering turns left, and yaw wraps at ±180°. Resetting yaw sets the current facing direction to zero. Wait-until comparisons read the sensor as the robot moves. An unreachable wait stops the motors and displays feedback. Use **Top** to compare paths and distances against the mat.
+
+## Develop and deploy
+
+Install Node.js 24, then run:
 
 ```sh
 npm ci
 npm run dev
-```
-
-Open the URL printed by Vite (usually http://localhost:5173). In Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`. Use Chrome with WebGL enabled for the 3D view.
-
-## Test and preview production
-
-```sh
 npm test
 npm run build
 npm run preview
 ```
 
-Open the preview URL (usually http://localhost:4173). The production build is in `dist/`. Serve that folder over HTTP. Dependencies, robot geometry, and editor assets are bundled or copied locally. Students need no login or physical robot.
+Use Chrome with WebGL enabled. In Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`. The production site is built into `dist/` and served over HTTP. Vite uses relative asset paths for the GitHub Pages repository subpath.
 
-## Deploy with GitHub Pages
-
-1. Create or choose a GitHub repository. Commit the project files, including the lockfile and `.github/workflows/pages.yml`, to its `main` branch.
-2. In the repository, open **Settings → Pages** and set **Source** to **GitHub Actions**.
-3. Push to `main` or run **Deploy robotics lab to GitHub Pages** manually in the **Actions** tab.
-4. Open the deployment URL listed in the workflow or Pages settings. A project site normally uses `https://<owner>.github.io/<repository>/`.
-
-The workflow runs the tests and builds before publishing. Vite uses relative asset paths so the project can run under a repository subpath.
-
-## Classroom controls
-     
-Choose **Student Challenge Mode** for the countdown. It begins when the adventure opens and keeps running across refreshes or tab changes. Each experiment asks students to predict, edit, run, observe, and answer a question. **Show me how** loads the current example, including intentionally broken programs for the debugging activities. Use **Results** to review saved progress. Practice can continue after time runs out. **Teacher mode** on the welcome screen provides duration and sound settings, independent level previews, validation criteria, and the teacher reference. Settings apply only in that browser.
-
-Drag blocks from the toolbox and connect them below **When program starts**. Right-click blocks for actions such as Duplicate and Delete. **Run** starts from the starting marker. **Pause** holds the robot and program. **Step** completes one action, including any movement or wait in that action. **Stop** ends the current run and keeps its trail. **Reset robot** clears the arena run. **Reset level** clears that level's saved program and progress and keeps its personal best.
-
-Drag in the arena to orbit and scroll to zoom. Use **Top** to compare the trail with the centimeter grid. Relative yaw increases when turning right and decreases when turning left. The simulator applies an ideal differential-drive model with no wheel slip. For beginners, the rotation count on a steering move measures the faster wheel. A wait-until times out after 15 simulated seconds if its condition stays false.
-
-Validation tests exercise the driving model and mission checkpoints. Test files are outside the production build.
+The existing GitHub Pages workflow runs the automated tests and production build, publishes on pushes to `main`, and records the deployment URL in GitHub Actions.

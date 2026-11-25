@@ -6,7 +6,7 @@ export type Command = { id: string } & (
   | { kind: 'move'; steering: number; amount: number; unit: 'cm' | 'rot'; direction: number }
   | { kind: 'until'; condition: Condition }
   | { kind: 'unfinished'; message: string }
-  | { kind: 'stop' | 'zero' }
+  | { kind: 'stop' | 'zero' | 'control' }
 );
 export type Pose = { x: number; z: number; angle: number };
 export type Sample = Pose & { yaw: number; travel: number; time: number; left: number; right: number };
@@ -38,16 +38,37 @@ export class Simulator {
   private remaining = 0;
   private stepping = false;
   private sensor = false;
+  private stream?: Iterator<Command>;
 
-  get yaw() { return (this.pose.angle - this.origin) * RAD; }
+  get yaw() {
+    const degrees = (this.pose.angle - this.origin) * RAD;
+    return ((degrees + 180) % 360 + 360) % 360 - 180;
+  }
   get active() { return this.state === 'running' || this.state === 'paused' ? this.program[this.index] : undefined; }
   sample(): Sample { return { ...this.pose, yaw: this.yaw, travel: this.travel, time: this.time, left: this.wheelLeft, right: this.wheelRight }; }
-  reset() { Object.assign(this, new Simulator()); }
+  reset() { this.stream = undefined; Object.assign(this, new Simulator()); }
   start(program: Command[]) {
     this.reset();
+    this.execute(program);
+  }
+  execute(program: Command[]) {
+    this.stream = undefined;
     this.program = program;
+    this.index = 0;
+    this.entry = null;
+    this.stepping = false;
+    this.message = '';
     this.state = 'running';
-    if (!program.length) this.fail('Connect at least one action below the start block.');
+    if (!program.length) this.state = 'done';
+  }
+  executeStream(stream: Iterator<Command>) {
+    this.execute([]);
+    this.stream = stream;
+    const first = stream.next();
+    if (!first.done) {
+      this.program.push(first.value);
+      this.state = 'running';
+    }
   }
   pause() {
     if (this.state === 'running') { this.state = 'paused'; this.left = this.right = 0; }
@@ -86,12 +107,15 @@ export class Simulator {
   private check(condition: Condition) {
     const read = (reading: Reading) => reading.kind === 'yaw' ? this.yaw : reading.value;
     const a = read(condition.left), b = read(condition.right);
-    return condition.op === 'gt' ? a > b : condition.op === 'lt' ? a < b : Math.abs(a - b) <= 0.5;
+    return condition.op === 'gt' ? a > b : condition.op === 'lt' ? a < b : Math.abs(a - b) <= EPS;
   }
   private finish(command: Command) {
     this.history.push({ command, before: this.entry!, after: this.sample(), sensor: this.sensor });
     this.entry = null;
     this.index++;
+    const next = this.stream?.next();
+    if (next && !next.done) this.program.push(next.value);
+    else this.stream = undefined;
     if (this.index === this.program.length) {
       if (this.continuous !== null && this.speed > 0) {
         this.fail(this.continuous ? 'Your robot is still turning. How could you tell it when to stop?' : 'Your robot is still moving. How could you tell it when to stop?');
@@ -148,8 +172,33 @@ export class Simulator {
       if (this.remaining > EPS) return;
     } else if (command.kind === 'until') {
       if (!this.check(command.condition)) {
+        const { left, right, op } = command.condition;
+        const yawFirst = left.kind === 'yaw' && right.kind === 'number';
+        const target = yawFirst ? right.value : right.kind === 'yaw' && left.kind === 'number' ? left.value : undefined;
+        const [l, r] = this.continuous === null ? [0, 0] : this.velocities(this.continuous);
+        const rate = (l - r) * RAD / TRACK;
+        if (target !== undefined && rate) {
+          const higher = (op === 'gt') === yawFirst;
+          const away = op !== 'eq' && (rate > 0) !== higher;
+          const outsideRange = target < -180 || target >= 180 || (op !== 'eq' && !higher && target === -180);
+          // A turn away from a strict threshold could appear to succeed when the sensor wraps.
+          if (away || outsideRange) {
+            this.fail('Your robot is turning away from the target angle. Check your steering direction and comparison.');
+            return;
+          }
+          if (op === 'eq') {
+            // Resolve the crossing within this physics tick so an exact target cannot be skipped.
+            let delta = target - this.yaw;
+            if (delta * rate < 0) delta += Math.sign(rate) * 360;
+            if (delta / rate <= dt) {
+              this.integrate(delta / rate, this.continuous);
+              this.finish(command);
+              return;
+            }
+          }
+        }
         if (this.time - this.entry.time >= 15) {
-          this.fail(this.continuous ? 'The robot kept moving but the condition never became true. Check the heading, turn direction, and comparison.' : 'The condition never became true. What could change the sensor reading while the program waits?');
+          this.fail(rate && target !== undefined ? 'Your robot is turning away from the target angle. Check your steering direction and comparison.' : 'The condition never became true. What could change the sensor reading while the program waits?');
           return;
         }
         this.integrate(dt, this.continuous);

@@ -1,4 +1,4 @@
-﻿type Block = { type: string; fields?: Record<string, string | number>; inputs?: Record<string, { block?: Block; shadow?: Block }>; next?: { block: Block } };
+export type Block = { type: string; extraState?: object; fields?: Record<string, string | number>; inputs?: Record<string, { block?: Block; shadow?: Block }>; next?: { block: Block } };
 export type Step = { category: string; example: string; instruction: string; block: Block; comparison?: { operator: string; threshold: number } };
 const setup: Step[] = [
   { category: 'Movement', example: 'set movement motors to [A + E]', instruction: 'Choose A + E in the menu. Those ports control the left and right wheels.', block: { type: 'lab_ports', fields: { VALUE: 'A+E' } } },

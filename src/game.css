@@ -236,3 +236,22 @@ dialog::backdrop { background: #20184d99; }
 }
 .experiment-blocks { margin-top: 8px; }
 #missionText > p + p { margin-top: 5px; }
+.lesson-select { display: grid; gap: 8px; margin: 16px 0; }
+.lesson-select button { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; text-align: left; }
+.lesson-select button[aria-pressed="true"] { border-color: #7057f2; background: #eee9ff; color: #372b87; }
+.lesson-select span { font-size: .86rem; }
+.step-card { background: #f2f5ff; padding: 10px; margin-top: 8px; border-radius: 10px; }
+.step-progress { font-weight: 750; color: #5036b2; }
+.step-card > p { margin-bottom: 6px; }
+.step-actions, .hub-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hub-buttons { padding: 0 12px 8px; }
+.hub-buttons[hidden] { display: none; }
+#studentResponse { width: 100%; border: 1px solid #aab8dc; border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+#experimentPreview { display: block; width: 100%; margin-bottom: 8px; font: inherit; }
+#missionText dt { font-weight: 750; }
+#missionText dd { margin: 0 0 8px; }
+.block-example.events { background: #936900; }
+.block-example.my-blocks { background: #bf3047; }
+@media (max-width: 1050px) {
+  #briefDetails { display: block; }
+}

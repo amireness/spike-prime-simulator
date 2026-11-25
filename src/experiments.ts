@@ -27,13 +27,13 @@ const curve = (steering: number, rotations = 2): Step => ({
   instruction: `Set steering to ${steering} and rotations to ${rotations}.`,
   block: { type: 'lab_curve', fields: { STEER: steering, AMOUNT: rotations } },
 });
-const turns = (degrees: number, motorSpeed = 50, timed = false): Step[] => {
+const turns = (degrees: number, motorSpeed = 50, timed = false, exact = false): Step[] => {
   const right = degrees > 0;
   const [zero, startRight, waitRight, stop, startLeft, waitLeft] = guides[3].steps;
-  const compare = right ? '>' : '<';
+  const compare = exact ? '=' : right ? '>' : '<';
   const gate: Step = {
     ...(right ? waitRight : waitLeft), comparison: { operator: compare, threshold: degrees },
-    block: { type: 'lab_until', inputs: { COND: { block: { type: right ? 'lab_gt' : 'lab_lt', inputs: {
+    block: { type: 'lab_until', inputs: { COND: { block: { type: exact ? 'lab_eq' : right ? 'lab_gt' : 'lab_lt', inputs: {
       LEFT: { block: { type: 'lab_yaw' } }, RIGHT: { shadow: { type: 'lab_number', fields: { VALUE: degrees } } },
     } } } } },
   };
@@ -90,16 +90,16 @@ const steering: Experiment[] = [0, 25, -25, 50, -50, 100, -100].map(value => ({
 }));
 const yawRuns: Experiment[] = [[45, 50, 0], [90, 50, 0], [135, 50, 0], [-90, 50, 0], [90, 50, 1], [90, 25, 1], [90, 25, 0]].map(([degrees, value, timing]) => ({
   title: timing ? `Timed turn at ${value}%` : `Turn ${Math.abs(degrees)}° ${degrees < 0 ? 'left' : 'right'}${value === 25 ? ' at 25%' : ''}`,
-  steps: turns(degrees, value, !!timing),
+  steps: turns(degrees, value, !!timing, true),
   edit: timing ? `Set speed to ${value}%. Use a plain wait of 0.4 seconds between start moving and stop moving.` :
-    `Set speed to ${value}%, steering to ${degrees < 0 ? '-100' : '100'}, and wait until yaw ${degrees < 0 ? '<' : '>'} ${degrees}.`,
+    `Set speed to ${value}%, steering to ${degrees < 0 ? '-100' : '100'}, and wait until yaw = ${degrees}.`,
   predict: timing ? 'Where will the robot point after 0.4 seconds at this speed?' : 'Which way will the robot turn? What yaw number should it stop near?',
   observe: 'Watch the heading arrow, the yaw number, and the motor speeds at the stop.',
   question: timing ? 'What was the final yaw? How did speed affect the result of the timed turn?' : 'What final yaw did you see? How close was it to the target?',
-  goal: timing ? `Run a turn at ${value}% with a 0.4-second wait.` : `Use yaw to stop just past ${degrees}° at ${value}% speed.`,
+  goal: timing ? `Run a turn at ${value}% with a 0.4-second wait.` : `Use yaw to stop near ${degrees}° at ${value}% speed.`,
   check: sim => completed(sim) && hasSpeed(sim, value) && Math.abs(sim.yaw) > 5 && (timing
     ? sim.history.some(({ command, before, after }) => command.kind === 'wait' && near(command.value, 0.4, 0.001) && after.yaw > before.yaw)
-    : (degrees < 0 ? sim.yaw < degrees : sim.yaw > degrees) && near(sim.yaw, degrees, 8) && sim.history.some(entry => entry.sensor)),
+    : near(sim.yaw, degrees, 4) && sim.history.some(entry => entry.sensor)),
 }));
 const official = guides[4].steps;
 const replace = (index: number, step: Step) => official.map((original, i) => i === index ? step : original);
