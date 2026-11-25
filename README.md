@@ -2,6 +2,8 @@
 
 **Competition Ready · Lesson 5 · Assembling an Advanced Base**
 
+**[Launch Robot Academy →](https://amireness.github.io/spike-prime-simulator/)**
+
 A 60-minute classroom game for programming a simulated SPIKE Prime driving base. Students name their robot, start with the Level 1 guided Blockly experiment, and earn badges across six levels. Programs, progress, challenge timing, and personal bests are stored in each student's browser for the site's origin.
 
 ## Run locally
